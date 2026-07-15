@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Play, Square, RotateCw, ScrollText, X, Container, RefreshCw, ExternalLink } from 'lucide-react';
+import { Play, Square, RotateCw, ScrollText, X, Container, RefreshCw } from 'lucide-react';
 
 import { authenticatedFetch } from '../../../utils/api';
 import { Button } from '../../../shared/view/ui/Button';
@@ -8,7 +8,6 @@ import type { Project } from '../../../types/app';
 type DockerPanelProps = {
   selectedProject: Project | null;
   isVisible: boolean;
-  onOpenPreview?: (port: number) => void;
 };
 
 type DockerAction = 'up' | 'down' | 'stop' | 'restart' | 'logs';
@@ -25,7 +24,7 @@ function isRunning(state: string) {
   return /run|up|healthy/i.test(state);
 }
 
-export default function DockerPanel({ selectedProject, isVisible, onOpenPreview }: DockerPanelProps) {
+export default function DockerPanel({ selectedProject, isVisible }: DockerPanelProps) {
   const [services, setServices] = useState<DockerService[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasCompose, setHasCompose] = useState(true);
@@ -45,7 +44,7 @@ export default function DockerPanel({ selectedProject, isVisible, onOpenPreview 
     setError(null);
     try {
       const res = await authenticatedFetch(
-        `/api/preview/docker/services?projectPath=${encodeURIComponent(projectPath)}`,
+        `/api/docker/services?projectPath=${encodeURIComponent(projectPath)}`,
       );
       const data = await res.json();
       setServices(Array.isArray(data.services) ? data.services : []);
@@ -69,7 +68,7 @@ export default function DockerPanel({ selectedProject, isVisible, onOpenPreview 
       const key = `${action}:${service || '*'}`;
       setBusy(key);
       try {
-        const res = await authenticatedFetch('/api/preview/docker', {
+        const res = await authenticatedFetch('/api/docker', {
           method: 'POST',
           body: JSON.stringify({ action, projectPath, service }),
         });
@@ -145,16 +144,16 @@ export default function DockerPanel({ selectedProject, isVisible, onOpenPreview 
                         <span className="truncate font-mono text-[11px] text-muted-foreground">{svc.image}</span>
                       )}
                       {svc.ports.map((p) => (
-                        <button
+                        <span
                           key={p.published}
-                          onClick={() => onOpenPreview?.(p.published)}
-                          disabled={!running}
-                          className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 font-mono text-[11px] transition-colors hover:border-primary hover:text-primary disabled:opacity-40 disabled:hover:border-border disabled:hover:text-inherit"
-                          title={running ? `Preview localhost:${p.published}` : 'Service is not running'}
+                          className={`inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 font-mono text-[11px] ${
+                            running ? '' : 'opacity-40'
+                          }`}
+                          title={`${p.published} → ${p.target}${running ? '' : ' (not running)'}`}
                         >
                           {p.published}
-                          {running && <ExternalLink className="h-3 w-3" />}
-                        </button>
+                          <span className="text-muted-foreground">→ {p.target}</span>
+                        </span>
                       ))}
                     </div>
                   </div>

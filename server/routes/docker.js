@@ -4,8 +4,6 @@ import path from 'node:path';
 
 import express from 'express';
 
-import { PREVIEW_COOKIE, issuePreviewToken } from '../utils/preview-proxy.js';
-
 const router = express.Router();
 
 const EXEC_TIMEOUT_MS = 20_000;
@@ -28,14 +26,6 @@ function run(cmd, args, options = {}) {
     );
   });
 }
-
-// POST /api/preview/session — mint a preview cookie for the authenticated user.
-// The iframe carries this cookie on every request the /preview proxy serves.
-router.post('/session', (req, res) => {
-  const token = issuePreviewToken();
-  res.setHeader('Set-Cookie', `${PREVIEW_COOKIE}=${token}; Path=/preview; HttpOnly; SameSite=Lax`);
-  res.json({ ok: true });
-});
 
 function normalizePort(entry) {
   // `docker compose config --format json` may give a string ("3000:3000",
@@ -135,54 +125,8 @@ async function resolveComposeServices(projectPath) {
   return { hasCompose: true, dockerAvailable: true, services, error: null };
 }
 
-// Ports that listening processes hold when their working directory is inside
-// the given project — this scopes dev servers (vite/next/etc.) to the project
-// instead of dumping every port on the machine.
-async function listProjectProcessPorts(projectPath) {
-  const listen = await run('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN']);
-  if (!listen.ok) return [];
-
-  // pid -> { command, ports:Set }
-  const byPid = new Map();
-  for (const line of listen.stdout.split('\n').slice(1)) {
-    const cols = line.split(/\s+/);
-    if (cols.length < 9) continue;
-    const command = cols[0];
-    const pid = Number(cols[1]);
-    const portMatch = (cols[8] || '').match(/:(\d+)$/);
-    if (!Number.isInteger(pid) || !portMatch) continue;
-    const port = Number(portMatch[1]);
-    if (!Number.isInteger(port)) continue;
-    if (!byPid.has(pid)) byPid.set(pid, { command, ports: new Set() });
-    byPid.get(pid).ports.add(port);
-  }
-  if (byPid.size === 0) return [];
-
-  // Batch-resolve each listening pid's cwd in one lsof call.
-  const pids = [...byPid.keys()];
-  const cwds = await run('lsof', ['-a', '-d', 'cwd', '-Fpn', '-p', pids.join(',')]);
-  const cwdByPid = new Map();
-  if (cwds.ok) {
-    let curPid = null;
-    for (const line of cwds.stdout.split('\n')) {
-      if (line.startsWith('p')) curPid = Number(line.slice(1));
-      else if (line.startsWith('n') && curPid != null) cwdByPid.set(curPid, line.slice(1));
-    }
-  }
-
-  const root = path.resolve(projectPath);
-  const inProject = (cwd) => cwd && (cwd === root || cwd.startsWith(root + path.sep));
-
-  const out = [];
-  for (const [pid, info] of byPid) {
-    if (!inProject(cwdByPid.get(pid))) continue;
-    for (const port of info.ports) out.push({ port, source: 'process', name: info.command });
-  }
-  return out;
-}
-
-// GET /api/preview/docker/services — resolve the project's compose services.
-router.get('/docker/services', async (req, res) => {
+// GET /api/docker/services — resolve the project's compose services.
+router.get('/services', async (req, res) => {
   const projectPath = req.query.projectPath;
   if (!projectPath || typeof projectPath !== 'string') {
     return res.status(400).json({ error: 'projectPath is required' });
@@ -197,44 +141,9 @@ router.get('/docker/services', async (req, res) => {
   res.json(await resolveComposeServices(projectPath));
 });
 
-// GET /api/preview/ports — ports relevant to THIS project: its compose services'
-// published ports plus dev servers listening from the project directory.
-router.get('/ports', async (req, res) => {
-  const projectPath = req.query.projectPath;
-  if (!projectPath || typeof projectPath !== 'string') {
-    return res.status(400).json({ error: 'projectPath is required' });
-  }
-  try {
-    if (!fs.statSync(projectPath).isDirectory()) {
-      return res.status(400).json({ error: 'projectPath is not a directory' });
-    }
-  } catch {
-    return res.status(400).json({ error: 'projectPath does not exist' });
-  }
-
-  const ports = new Map(); // port -> { port, source, name }
-
-  const compose = await resolveComposeServices(projectPath);
-  for (const svc of compose.services) {
-    if (!/run|up|healthy/i.test(svc.state)) continue; // only published-and-running
-    for (const p of svc.ports) {
-      ports.set(p.published, { port: p.published, source: 'docker', name: svc.name });
-    }
-  }
-
-  for (const entry of await listProjectProcessPorts(projectPath)) {
-    if (!ports.has(entry.port)) ports.set(entry.port, entry);
-  }
-
-  res.json({
-    ports: [...ports.values()].sort((a, b) => a.port - b.port),
-    dockerAvailable: compose.dockerAvailable,
-  });
-});
-
-// POST /api/preview/docker — run a whitelisted docker compose action in the
-// currently selected project's directory.
-router.post('/docker', async (req, res) => {
+// POST /api/docker — run a whitelisted docker compose action in the currently
+// selected project's directory.
+router.post('/', async (req, res) => {
   const { action, projectPath, service } = req.body || {};
 
   if (!DOCKER_ACTIONS.has(action)) {

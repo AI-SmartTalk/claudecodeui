@@ -1,4 +1,4 @@
-import { MessageSquare, Terminal, Folder, GitBranch, ClipboardCheck, MonitorPlay, Globe, Container, type LucideIcon } from 'lucide-react';
+import { MessageSquare, Terminal, Folder, GitBranch, ClipboardCheck, MonitorPlay, Container, type LucideIcon } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -36,7 +36,6 @@ const BASE_TABS: BuiltInTab[] = [
   { kind: 'builtin', id: 'shell',   labelKey: 'tabs.shell',   icon: Terminal },
   { kind: 'builtin', id: 'files',   labelKey: 'tabs.files',   icon: Folder },
   { kind: 'builtin', id: 'git',     labelKey: 'tabs.git',     icon: GitBranch },
-  { kind: 'builtin', id: 'preview', labelKey: 'tabs.preview', icon: Globe },
   { kind: 'builtin', id: 'docker',  labelKey: 'tabs.docker',  icon: Container },
 ];
 

@@ -12,6 +12,8 @@ import { Readable } from 'node:stream';
 
 import express from 'express';
 
+import { appConfigDb } from './modules/database/index.js';
+
 const ENV = {
   baseUrl: (process.env.VOICE_API_BASE_URL || '').replace(/\/$/, ''),
   apiKey: process.env.VOICE_API_KEY || '',
@@ -28,12 +30,16 @@ const ENV = {
  */
 function resolveConfig(req) {
   const h = req.headers;
+  // Server-side persisted backend (e.g. the local Whisper container enabled from
+  // Settings). Takes precedence over env; the client still can't set the host.
+  const storedBaseUrl = (appConfigDb.get('voice_base_url') || '').replace(/\/$/, '');
+  const storedSttModel = appConfigDb.get('voice_stt_model') || '';
   return {
     // Security: do not allow clients to control the outbound backend host.
-    // Always use the server-side configured base URL.
-    baseUrl: ENV.baseUrl,
+    // Always use a server-side configured base URL (DB, then env).
+    baseUrl: storedBaseUrl || ENV.baseUrl,
     apiKey: String(h['x-voice-api-key'] || '') || ENV.apiKey,
-    sttModel: String(h['x-voice-stt-model'] || '') || ENV.sttModel,
+    sttModel: String(h['x-voice-stt-model'] || '') || storedSttModel || ENV.sttModel,
     ttsModel: String(h['x-voice-tts-model'] || '') || ENV.ttsModel,
     ttsVoice: String(h['x-voice-tts-voice'] || '') || ENV.ttsVoice,
     ttsFormat: String(h['x-voice-tts-format'] || '').trim(),

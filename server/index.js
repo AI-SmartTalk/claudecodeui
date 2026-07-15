@@ -59,8 +59,8 @@ import userRoutes from './routes/user.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import voiceRoutes from './voice-proxy.js';
-import previewRoutes from './routes/preview.js';
-import { previewProxyMiddleware, isPreviewAuthenticated } from './utils/preview-proxy.js';
+import voiceLocalRoutes from './routes/voice-local.js';
+import dockerRoutes from './routes/docker.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
@@ -109,7 +109,6 @@ const wss = createWebSocketServer(server, {
     verifyClient: {
         isPlatform: IS_PLATFORM,
         authenticateWebSocket,
-        verifyPreviewCookie: isPreviewAuthenticated,
     },
     chat: {
         spawnFns: {
@@ -148,11 +147,6 @@ const wss = createWebSocketServer(server, {
 app.locals.wss = wss;
 
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token'] }));
-
-// Preview proxy: serves /preview/<port>/ by streaming to a local dev server.
-// Mounted before the body parsers so request bodies pass through untouched, and
-// outside the JWT-protected /api mount because it self-authenticates via cookie.
-app.use(previewProxyMiddleware);
 
 app.use(express.json({
     limit: '50mb',
@@ -227,10 +221,13 @@ app.use('/api/providers', authenticateToken, providerRoutes);
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
 
+// Local Whisper (Docker) management — mount before /api/voice so the more
+// specific prefix wins.
+app.use('/api/voice/local-whisper', authenticateToken, voiceLocalRoutes);
 app.use('/api/voice', authenticateToken, voiceRoutes);
 
-// Preview API: mint the preview cookie, list ports, control docker (protected)
-app.use('/api/preview', authenticateToken, previewRoutes);
+// Docker API: list a project's compose services and run whitelisted actions.
+app.use('/api/docker', authenticateToken, dockerRoutes);
 
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(APP_ROOT, 'public')));

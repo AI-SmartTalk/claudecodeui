@@ -18,6 +18,17 @@ export default defineConfig(({ mode }) => {
   // TODO: Remove support for legacy PORT variables in all locations in a future major release, leaving only SERVER_PORT.
   const serverPort = env.SERVER_PORT || env.PORT || 3001
 
+  // Hosts allowed to reach the dev server (Vite blocks unknown Host headers).
+  // Set ALLOWED_HOSTS to a comma-separated list, or 'true'/'all' to allow any
+  // host (handy for Tailscale/ngrok/reverse-proxy access).
+  const allowedHostsEnv = (env.ALLOWED_HOSTS || '').trim()
+  const allowedHosts =
+    allowedHostsEnv === 'true' || allowedHostsEnv === 'all'
+      ? true
+      : allowedHostsEnv
+        ? allowedHostsEnv.split(',').map((h) => h.trim()).filter(Boolean)
+        : undefined
+
   return {
     plugins: [react()],
     resolve: {
@@ -28,15 +39,9 @@ export default defineConfig(({ mode }) => {
     server: {
       host,
       port: parseInt(env.VITE_PORT) || 5173,
+      ...(allowedHosts ? { allowedHosts } : {}),
       proxy: {
         '/api': `http://${proxyHost}:${serverPort}`,
-        '/preview': {
-          target: `http://${proxyHost}:${serverPort}`,
-          ws: true,
-          // The dev server (e.g. another Vite) sends redirects and HMR sockets;
-          // don't let this proxy rewrite them.
-          autoRewrite: false,
-        },
         '/ws': {
           target: `ws://${proxyHost}:${serverPort}`,
           ws: true

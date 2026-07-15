@@ -23,8 +23,12 @@ kill_tree() { # recursively kill a PID and its descendants
   kill "$pid" 2>/dev/null || true
 }
 
+# The API port is the source of truth for "is the stack up" — a pidfile PID can
+# die while orphaned children keep serving, so we probe the port instead.
 is_running() {
-  [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null
+  local p
+  p="$(port_from_env SERVER_PORT 3001)"
+  [[ -n "$(lsof -nP -iTCP:"$p" -sTCP:LISTEN -t 2>/dev/null)" ]]
 }
 
 status() {
@@ -86,14 +90,26 @@ start() {
 }
 
 stop() {
+  local sp vp any=0 port pid
+  sp="$(port_from_env SERVER_PORT 3001)"
+  vp="$(port_from_env VITE_PORT 5173)"
+
   if [[ -f "$PIDFILE" ]]; then
     kill_tree "$(cat "$PIDFILE")"
     rm -f "$PIDFILE"
-    echo "Stopped."
-  else
-    # Fallback: nothing tracked, but try to clean stray dev processes started here.
-    echo "No pidfile — nothing to stop."
+    any=1
   fi
+
+  # Safety net: kill whatever still listens on our ports (orphaned children left
+  # behind if the npm parent died and they got reparented to init).
+  for port in "$sp" "$vp"; do
+    for pid in $(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null); do
+      kill_tree "$pid"
+      any=1
+    done
+  done
+
+  if [[ "$any" == 1 ]]; then echo "Stopped."; else echo "Nothing to stop."; fi
 }
 
 case "${1:-}" in

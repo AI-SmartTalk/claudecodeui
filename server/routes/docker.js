@@ -1,6 +1,5 @@
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
-import path from 'node:path';
 
 import express from 'express';
 
@@ -8,6 +7,32 @@ const router = express.Router();
 
 const EXEC_TIMEOUT_MS = 20_000;
 const DOCKER_ACTIONS = new Set(['ps', 'up', 'down', 'stop', 'restart', 'logs']);
+
+// Names Docker Compose auto-discovers on its own (no `-f` needed).
+const CANONICAL_COMPOSE = new Set(['compose.yaml', 'compose.yml', 'docker-compose.yaml', 'docker-compose.yml']);
+// Matches canonical files plus variants like `docker-compose.dev.yml`, `compose.prod.yaml`.
+const COMPOSE_FILE_RE = /^(docker-)?compose(\.[\w-]+)*\.ya?ml$/i;
+
+// Docker Compose only auto-discovers the four canonical filenames. Projects that
+// name their file `docker-compose.dev.yml` (etc.) need an explicit `-f`. Return
+// the base compose args (with `-f` when non-canonical) and whether a file exists.
+function composeArgs(projectPath) {
+  let entries = [];
+  try {
+    entries = fs.readdirSync(projectPath).filter((f) => COMPOSE_FILE_RE.test(f));
+  } catch {
+    return { hasCompose: false, base: ['compose'] };
+  }
+  if (entries.length === 0) return { hasCompose: false, base: ['compose'] };
+  // If a canonical file is present, let Compose auto-discover (preserves the
+  // implicit merge of `*.override.yml`). Otherwise pick a single variant file,
+  // preferring a dev one since this panel drives local development.
+  if (entries.some((f) => CANONICAL_COMPOSE.has(f.toLowerCase()))) {
+    return { hasCompose: true, base: ['compose'] };
+  }
+  const pick = entries.find((f) => /\bdev\b|\.dev\./i.test(f)) || entries.sort()[0];
+  return { hasCompose: true, base: ['compose', '-f', pick] };
+}
 
 function run(cmd, args, options = {}) {
   return new Promise((resolve) => {
@@ -81,14 +106,16 @@ function parseComposePs(stdout) {
 // Resolve a project's compose file into services with declared/live ports and
 // running state, by merging `docker compose config` with `docker compose ps`.
 async function resolveComposeServices(projectPath) {
-  const config = await run('docker', ['compose', 'config', '--format', 'json'], { cwd: projectPath });
+  const { hasCompose, base } = composeArgs(projectPath);
+  const config = await run('docker', [...base, 'config', '--format', 'json'], { cwd: projectPath });
   if (!config.ok) {
-    const hasCompose = ['docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml'].some(
-      (f) => fs.existsSync(path.join(projectPath, f)),
-    );
+    // A genuinely missing docker binary fails with ENOENT ("spawn docker
+    // ENOENT"); anything else (bad/absent compose file, daemon down) means the
+    // CLI is present but the command failed — don't report it as "not detected".
+    const dockerAvailable = config.code !== 'ENOENT' && !/is not recognized/i.test(config.stderr);
     return {
       hasCompose,
-      dockerAvailable: !/not found|command not found|not recognized/i.test(config.stderr),
+      dockerAvailable,
       services: [],
       error: config.stderr.trim() || null,
     };
@@ -101,7 +128,7 @@ async function resolveComposeServices(projectPath) {
     return { hasCompose: true, dockerAvailable: true, services: [], error: 'Failed to parse compose config' };
   }
 
-  const ps = await run('docker', ['compose', 'ps', '--format', 'json', '--all'], { cwd: projectPath });
+  const ps = await run('docker', [...base, 'ps', '--format', 'json', '--all'], { cwd: projectPath });
   const running = ps.ok ? parseComposePs(ps.stdout) : {};
 
   const services = Object.entries(parsed.services || {}).map(([name, def]) => {
@@ -165,13 +192,14 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Invalid service name' });
   }
 
+  const { base } = composeArgs(projectPath);
   const argsByAction = {
-    ps: ['compose', 'ps'],
-    up: ['compose', 'up', '-d', ...(service ? [service] : [])],
-    down: ['compose', 'down'],
-    stop: ['compose', 'stop', ...(service ? [service] : [])],
-    restart: ['compose', 'restart', ...(service ? [service] : [])],
-    logs: ['compose', 'logs', '--tail', '200', '--no-color', ...(service ? [service] : [])],
+    ps: [...base, 'ps'],
+    up: [...base, 'up', '-d', ...(service ? [service] : [])],
+    down: [...base, 'down'],
+    stop: [...base, 'stop', ...(service ? [service] : [])],
+    restart: [...base, 'restart', ...(service ? [service] : [])],
+    logs: [...base, 'logs', '--tail', '200', '--no-color', ...(service ? [service] : [])],
   };
 
   const result = await run('docker', argsByAction[action], { cwd: projectPath });

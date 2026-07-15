@@ -139,6 +139,8 @@ export function useSidebarController({
   const [archivedProjects, setArchivedProjects] = useState<ArchivedProjectListItem[]>([]);
   const [archivedSessions, setArchivedSessions] = useState<ArchivedSessionListItem[]>([]);
   const [isArchivedSessionsLoading, setIsArchivedSessionsLoading] = useState(false);
+  const [recentSessions, setRecentSessions] = useState<ArchivedSessionListItem[]>([]);
+  const [isRecentSessionsLoading, setIsRecentSessionsLoading] = useState(false);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [optimisticStarByProjectId, setOptimisticStarByProjectId] = useState<Map<string, boolean>>(new Map());
   const [loadingMoreProjects, setLoadingMoreProjects] = useState<Set<string>>(new Set());
@@ -299,6 +301,31 @@ export function useSidebarController({
     // and background synchronizer updates are reflected without a full reload.
     void fetchArchivedSessions();
   }, [fetchArchivedSessions, searchMode]);
+
+  // Cross-project "recent conversations" list, shown in the Conversations tab
+  // while its search box is empty so it doubles as a fast switcher.
+  const fetchRecentSessions = useCallback(async () => {
+    setIsRecentSessionsLoading(true);
+    try {
+      const response = await api.recentSessions(40);
+      if (!response.ok) {
+        throw new Error(`Failed to load recent sessions: ${response.status}`);
+      }
+      const payload = (await response.json()) as ArchivedSessionsApiPayload;
+      setRecentSessions(Array.isArray(payload.data?.sessions) ? payload.data.sessions : []);
+    } catch (error) {
+      console.error('[Sidebar] Failed to load recent sessions:', error);
+    } finally {
+      setIsRecentSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (searchMode !== 'conversations') {
+      return;
+    }
+    void fetchRecentSessions();
+  }, [fetchRecentSessions, searchMode]);
 
   useEffect(() => {
     setOptimisticStarByProjectId((previous) => {
@@ -978,6 +1005,8 @@ export function useSidebarController({
     searchMode,
     setSearchMode,
     conversationResults,
+    recentSessions,
+    isRecentSessionsLoading,
     isSearching,
     searchProgress,
     clearConversationResults: useCallback(() => {

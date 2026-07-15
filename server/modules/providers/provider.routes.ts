@@ -549,6 +549,16 @@ router.get(
 );
 
 router.get(
+  '/sessions/recent',
+  asyncHandler(async (req: Request, res: Response) => {
+    const rawLimit = Number(req.query.limit);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 100) : 40;
+    const sessions = sessionsService.listRecentSessions(limit);
+    res.json(createApiSuccessResponse({ sessions }));
+  }),
+);
+
+router.get(
   '/sessions/archived',
   asyncHandler(async (_req: Request, res: Response) => {
     const sessions = sessionsService.listArchivedSessions();

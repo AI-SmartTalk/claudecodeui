@@ -69,6 +69,8 @@ function Sidebar({
     searchMode,
     setSearchMode,
     conversationResults,
+    recentSessions,
+    isRecentSessionsLoading,
     isSearching,
     searchProgress,
     clearConversationResults,
@@ -251,6 +253,8 @@ function Sidebar({
               if (mode === 'projects') clearConversationResults();
             }}
             conversationResults={conversationResults}
+            recentSessions={recentSessions}
+            isRecentSessionsLoading={isRecentSessionsLoading}
             isSearching={isSearching}
             searchProgress={searchProgress}
             onRestoreArchivedProject={restoreArchivedProject}

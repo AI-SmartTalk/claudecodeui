@@ -190,6 +190,45 @@ export const sessionsService = {
   },
 
   /**
+   * Returns the most-recently-active sessions across every project, annotated
+   * with the owning project's metadata, so the sidebar can render a flat
+   * cross-project "recent conversations" switcher. Sessions belonging to an
+   * archived project are dropped. Ordering (recent-first) is preserved from the
+   * DB query.
+   */
+  listRecentSessions(limit = 40): ArchivedSessionListItem[] {
+    const recentSessions = sessionsDb.getRecentSessions(limit);
+    const projectCache = new Map<string, ReturnType<typeof projectsDb.getProjectPath>>();
+
+    return recentSessions
+      .map((session) => {
+        const projectPath = session.project_path?.trim() ? session.project_path : null;
+        let project = null;
+
+        if (projectPath) {
+          if (!projectCache.has(projectPath)) {
+            projectCache.set(projectPath, projectsDb.getProjectPath(projectPath));
+          }
+          project = projectCache.get(projectPath) ?? null;
+        }
+
+        return {
+          sessionId: session.session_id,
+          provider: session.provider as LLMProvider,
+          projectId: project?.project_id ?? null,
+          projectPath,
+          projectDisplayName: resolveProjectDisplayName(projectPath, project?.custom_project_name),
+          sessionTitle: session.custom_name?.trim() || session.session_id,
+          createdAt: session.created_at ?? null,
+          updatedAt: session.updated_at ?? null,
+          lastActivity: session.updated_at ?? session.created_at ?? null,
+          isProjectArchived: Boolean(project?.isArchived),
+        };
+      })
+      .filter((session) => !session.isProjectArchived);
+  },
+
+  /**
    * Returns archived sessions with enough project metadata for the sidebar to
    * group, filter, open, and restore them without a per-row follow-up query.
    */

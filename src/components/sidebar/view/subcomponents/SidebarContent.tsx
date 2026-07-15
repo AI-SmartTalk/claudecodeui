@@ -127,6 +127,8 @@ type SidebarContentProps = {
   searchMode: SidebarSearchMode;
   onSearchModeChange: (mode: SidebarSearchMode) => void;
   conversationResults: ConversationSearchResults | null;
+  recentSessions: ArchivedSessionListItem[];
+  isRecentSessionsLoading: boolean;
   isSearching: boolean;
   searchProgress: SearchProgress | null;
   onRestoreArchivedProject: (projectId: string) => void;
@@ -167,6 +169,8 @@ export default function SidebarContent({
   searchMode,
   onSearchModeChange,
   conversationResults,
+  recentSessions,
+  isRecentSessionsLoading,
   isSearching,
   searchProgress,
   onRestoreArchivedProject,
@@ -314,6 +318,47 @@ export default function SidebarContent({
               ))}
             </div>
           ) : null
+        ) : searchMode === 'conversations' ? (
+          // Empty search box in the Conversations tab: show recent conversations
+          // across all projects as a fast cross-project switcher.
+          isRecentSessionsLoading && recentSessions.length === 0 ? (
+            <div className="px-4 py-12 text-center md:py-8">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-muted md:mb-3">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+              </div>
+              <p className="text-sm text-muted-foreground">{t('search.loadingRecent', 'Loading recent conversations…')}</p>
+            </div>
+          ) : recentSessions.length === 0 ? (
+            <div className="px-4 py-12 text-center md:py-8">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-muted md:mb-3">
+                <MessageSquare className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="mb-2 text-base font-medium text-foreground md:mb-1">{t('search.noRecentTitle', 'No recent conversations')}</h3>
+              <p className="text-sm text-muted-foreground">{t('search.startTyping', 'Type to search across all projects')}</p>
+            </div>
+          ) : (
+            <div className="space-y-1 px-2">
+              <p className="px-1 py-1 text-xs text-muted-foreground">
+                {t('search.recentHint', 'Recent · all projects — type to search')}
+              </p>
+              {recentSessions.map((session) => (
+                <button
+                  key={`${session.projectId ?? 'none'}-${session.sessionId}`}
+                  className="w-full rounded-md px-2 py-2 text-left transition-colors hover:bg-accent/50"
+                  onClick={() => onConversationResultClick(session.projectId, session.sessionId, session.provider)}
+                >
+                  <div className="mb-0.5 flex items-center gap-1.5">
+                    <SessionProviderLogo provider={session.provider} className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span className="truncate text-xs font-normal text-foreground">{session.sessionTitle}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 pl-5">
+                    <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                    <span className="truncate text-[11px] text-muted-foreground">{session.projectDisplayName}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )
         ) : searchMode === 'running' ? (
           projectListProps.filteredProjects.length === 0 ? (
             <div className="px-4 py-12 text-center md:py-8">

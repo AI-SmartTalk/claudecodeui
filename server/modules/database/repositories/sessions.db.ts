@@ -308,6 +308,26 @@ export const sessionsDb = {
   },
 
   /**
+   * Active sessions across all projects, most-recently-active first. Powers the
+   * cross-project "recent conversations" switcher; capped by `limit` so the
+   * sidebar can render it without paging.
+   */
+  getRecentSessions(limit = 40): SessionRow[] {
+    const db = getConnection();
+    const rows = db
+      .prepare(
+        `SELECT ${SESSION_ROW_COLUMNS}
+         FROM sessions
+         WHERE isArchived = 0
+         ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC
+         LIMIT ?`
+      )
+      .all(limit) as SessionRow[];
+
+    return normalizeSessionRows(rows);
+  },
+
+  /**
    * Archived rows are intentionally queried separately so the caller can render
    * them in a dedicated view without reintroducing them into active session lists.
    */

@@ -109,6 +109,8 @@ export const api = {
   },
   getArchivedSessions: () =>
     authenticatedFetch('/api/providers/sessions/archived'),
+  recentSessions: (limit = 40) =>
+    authenticatedFetch(`/api/providers/sessions/recent?limit=${limit}`),
   runningSessions: () =>
     authenticatedFetch('/api/providers/sessions/running'),
   restoreSession: (sessionId) =>

@@ -151,3 +151,7 @@ tasks/
 cloudcli-sidebar-app-source.tar.gz
 cloudcli-sidebar.html
 electron/*.tar.gz
+
+# Local dev helper (local.sh)
+.local-dev.pid
+.local-dev.log

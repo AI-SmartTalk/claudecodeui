@@ -19,7 +19,13 @@ type DetectedPort = {
   name: string;
 };
 
-export default function PreviewPanel({ isVisible, requestedPort, onPortConsumed }: PreviewPanelProps) {
+export default function PreviewPanel({
+  selectedProject,
+  isVisible,
+  requestedPort,
+  onPortConsumed,
+}: PreviewPanelProps) {
+  const projectPath = selectedProject?.fullPath || selectedProject?.path || '';
   const [portInput, setPortInput] = useState('');
   const [activePort, setActivePort] = useState<number | null>(null);
   const [ports, setPorts] = useState<DetectedPort[]>([]);
@@ -44,9 +50,15 @@ export default function PreviewPanel({ isVisible, requestedPort, onPortConsumed 
   }, []);
 
   const scanPorts = useCallback(async () => {
+    if (!projectPath) {
+      setPorts([]);
+      return;
+    }
     setScanning(true);
     try {
-      const res = await authenticatedFetch('/api/preview/ports');
+      const res = await authenticatedFetch(
+        `/api/preview/ports?projectPath=${encodeURIComponent(projectPath)}`,
+      );
       const data = await res.json();
       setPorts(Array.isArray(data.ports) ? data.ports : []);
     } catch {
@@ -54,14 +66,14 @@ export default function PreviewPanel({ isVisible, requestedPort, onPortConsumed 
     } finally {
       setScanning(false);
     }
-  }, []);
+  }, [projectPath]);
 
   useEffect(() => {
     if (isVisible && ports.length === 0) {
       void scanPorts();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isVisible]);
+  }, [isVisible, projectPath]);
 
   const openPort = useCallback((port: number) => {
     setActivePort(port);
@@ -175,8 +187,9 @@ export default function PreviewPanel({ isVisible, requestedPort, onPortConsumed 
               Enter a port or pick a detected one to preview a local server here.
             </p>
             <p className="max-w-sm text-xs opacity-70">
-              Your project&apos;s dev server (e.g. <span className="font-mono">localhost:3000</span>) is
-              proxied through CloudCLI, so it&apos;s reachable from your phone too.
+              Scan lists this project&apos;s ports — its running compose services and dev servers
+              started from the project folder. The app is proxied through CloudCLI, so it&apos;s
+              reachable from your phone too.
             </p>
           </div>
         ) : !sessionReady ? (

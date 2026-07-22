@@ -20,6 +20,37 @@ const hasErrorCode = (error: unknown, code: string): boolean => (
   error instanceof Error && 'code' in error && error.code === code
 );
 
+/**
+ * Keychain service name Claude Code uses to store its OAuth credentials on macOS.
+ * On that platform `~/.claude/.credentials.json` is never written, so the file
+ * lookup below always misses and the keychain is the only source of truth.
+ */
+const MACOS_KEYCHAIN_SERVICE = 'Claude Code-credentials';
+
+/**
+ * Reports whether Claude Code has an OAuth entry in the macOS login keychain.
+ *
+ * Deliberately queries metadata only (no `-w`): dumping the secret can raise a
+ * keychain access prompt, which would hang a headless server, and the token
+ * value is not needed here — the spawned CLI reads it itself.
+ */
+const hasMacOSKeychainCredentials = (): boolean => {
+  if (process.platform !== 'darwin') {
+    return false;
+  }
+
+  try {
+    const result = spawn.sync(
+      'security',
+      ['find-generic-password', '-s', MACOS_KEYCHAIN_SERVICE],
+      { stdio: 'ignore', timeout: 5000 },
+    );
+    return !result.error && result.status === 0;
+  } catch {
+    return false;
+  }
+};
+
 export class ClaudeProviderAuth implements IProviderAuth {
   /**
    * Checks whether the Claude Code CLI is available on this host.
@@ -126,18 +157,17 @@ export class ClaudeProviderAuth implements IProviderAuth {
         };
       }
 
-      return {
-        authenticated: false,
-        email: null,
-        method: null,
-        error: missingCredentialsError,
-      };
+      return this.checkKeychainCredentials(missingCredentialsError);
     } catch (error) {
       let errorMessage = 'Unable to read Claude credentials. Run claude /login again.';
 
       if (hasErrorCode(error, 'ENOENT')) {
-        errorMessage = missingCredentialsError;
-      } else if (error instanceof SyntaxError) {
+        // Expected on macOS, where Claude Code stores credentials in the keychain
+        // instead of writing ~/.claude/.credentials.json.
+        return this.checkKeychainCredentials(missingCredentialsError);
+      }
+
+      if (error instanceof SyntaxError) {
         errorMessage = 'Claude credentials are unreadable. Run claude /login again.';
       }
 
@@ -148,5 +178,21 @@ export class ClaudeProviderAuth implements IProviderAuth {
         error: errorMessage,
       };
     }
+  }
+
+  /**
+   * Last-resort credential lookup for macOS keychain logins.
+   */
+  private checkKeychainCredentials(fallbackError: string): ClaudeCredentialsStatus {
+    if (hasMacOSKeychainCredentials()) {
+      return { authenticated: true, email: null, method: 'keychain' };
+    }
+
+    return {
+      authenticated: false,
+      email: null,
+      method: null,
+      error: fallbackError,
+    };
   }
 }

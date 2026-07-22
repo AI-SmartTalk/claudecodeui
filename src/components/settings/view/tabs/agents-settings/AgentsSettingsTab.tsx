@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { useDefaultModelSettings } from '../../../hooks/useDefaultModelSettings';
 import type { AgentCategory, AgentProvider } from '../../../types/types';
 
 import type { AgentContext, AgentsSettingsTabProps } from './types';
@@ -20,6 +21,14 @@ export default function AgentsSettingsTab({
 }: AgentsSettingsTabProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('account');
+  const {
+    modelCatalog,
+    defaultModels,
+    loading: defaultModelLoading,
+    savingProvider,
+    error: defaultModelError,
+    selectDefaultModel,
+  } = useDefaultModelSettings();
   const visibleCategories = useMemo<AgentCategory[]>(() => (
     selectedAgent === 'opencode'
       ? ['account', 'permissions', 'mcp']
@@ -89,6 +98,14 @@ export default function AgentsSettingsTab({
           codexPermissionMode={codexPermissionMode}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
           projects={projects}
+          defaultModel={defaultModels[selectedAgent]}
+          modelOptions={modelCatalog[selectedAgent]?.OPTIONS ?? []}
+          onSelectDefaultModel={(model) => {
+            void selectDefaultModel(selectedAgent, model);
+          }}
+          defaultModelLoading={defaultModelLoading}
+          savingDefaultModel={savingProvider === selectedAgent}
+          defaultModelError={defaultModelError}
         />
       </div>
     </div>

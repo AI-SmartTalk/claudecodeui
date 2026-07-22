@@ -7,6 +7,7 @@ import type {
   CodexPermissionMode,
   SettingsProject,
 } from '../../../types/types';
+import type { ProviderModelOption } from '../../../../../types/app';
 
 export type AgentContext = {
   authStatus: AuthStatus;
@@ -53,4 +54,11 @@ export type AgentCategoryContentSectionProps = {
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   projects: SettingsProject[];
+  /** Default-model state for the currently selected agent. */
+  defaultModel?: string;
+  modelOptions: ProviderModelOption[];
+  onSelectDefaultModel: (model: string) => void;
+  defaultModelLoading: boolean;
+  savingDefaultModel: boolean;
+  defaultModelError: string | null;
 };

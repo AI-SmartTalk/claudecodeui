@@ -18,6 +18,12 @@ export default function AgentCategoryContentSection({
   codexPermissionMode,
   onCodexPermissionModeChange,
   projects,
+  defaultModel,
+  modelOptions,
+  onSelectDefaultModel,
+  defaultModelLoading,
+  savingDefaultModel,
+  defaultModelError,
 }: AgentCategoryContentSectionProps) {
   return (
     <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-4">
@@ -26,6 +32,12 @@ export default function AgentCategoryContentSection({
           agent={selectedAgent}
           authStatus={agentContextById[selectedAgent].authStatus}
           onLogin={agentContextById[selectedAgent].onLogin}
+          defaultModel={defaultModel}
+          modelOptions={modelOptions}
+          onSelectDefaultModel={onSelectDefaultModel}
+          defaultModelLoading={defaultModelLoading}
+          savingDefaultModel={savingDefaultModel}
+          defaultModelError={defaultModelError}
         />
       )}
 

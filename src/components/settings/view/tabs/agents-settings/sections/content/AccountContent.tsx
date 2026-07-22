@@ -1,13 +1,21 @@
-import { LogIn } from 'lucide-react';
+import { BadgeCheck, Loader2, LogIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import { Badge, Button } from '../../../../../../../shared/view/ui';
 import SessionProviderLogo from '../../../../../../llm-logo-provider/SessionProviderLogo';
+import type { ProviderModelOption } from '../../../../../../../types/app';
 import type { AgentProvider, AuthStatus } from '../../../../../types/types';
 
 type AccountContentProps = {
   agent: AgentProvider;
   authStatus: AuthStatus;
   onLogin: () => void;
+  defaultModel?: string;
+  modelOptions: ProviderModelOption[];
+  onSelectDefaultModel: (model: string) => void;
+  defaultModelLoading: boolean;
+  savingDefaultModel: boolean;
+  defaultModelError: string | null;
 };
 
 type AgentVisualConfig = {
@@ -56,7 +64,17 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
   },
 };
 
-export default function AccountContent({ agent, authStatus, onLogin }: AccountContentProps) {
+export default function AccountContent({
+  agent,
+  authStatus,
+  onLogin,
+  defaultModel,
+  modelOptions,
+  onSelectDefaultModel,
+  defaultModelLoading,
+  savingDefaultModel,
+  defaultModelError,
+}: AccountContentProps) {
   const { t } = useTranslation('settings');
   const config = agentConfig[agent];
 
@@ -143,6 +161,64 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
             </div>
           )}
         </div>
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <h4 className="font-medium text-foreground">
+            {t('agents.defaultModel.title', { defaultValue: 'Default model' })}
+          </h4>
+          <p className="text-sm text-muted-foreground">
+            {t('agents.defaultModel.description', {
+              agent: config.name,
+              defaultValue: `Model new ${config.name} conversations start on. Inside a conversation, /model still overrides it for that session only.`,
+            })}
+          </p>
+        </div>
+
+        {defaultModelLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {t('agents.defaultModel.loading', { defaultValue: 'Loading models...' })}
+          </div>
+        ) : modelOptions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {t('agents.defaultModel.unavailable', { defaultValue: 'No models available for this agent.' })}
+          </p>
+        ) : (
+          <div className="grid gap-2 md:grid-cols-2">
+            {modelOptions.map((option) => {
+              const isSelected = option.value === defaultModel;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onSelectDefaultModel(option.value)}
+                  disabled={savingDefaultModel}
+                  aria-pressed={isSelected}
+                  className={`flex flex-col rounded-lg border p-3 text-left transition-all disabled:opacity-60 ${
+                    isSelected
+                      ? 'border-primary/50 bg-primary/10'
+                      : 'border-border bg-card/50 hover:border-primary/30 hover:bg-accent/50'
+                  }`}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-foreground">{option.label}</span>
+                    {isSelected && <BadgeCheck className="h-4 w-4 shrink-0 text-primary" />}
+                  </span>
+                  <span className="mt-0.5 font-mono text-xs text-muted-foreground">{option.value}</span>
+                  {option.description && (
+                    <span className="mt-1 text-xs text-muted-foreground">{option.description}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {defaultModelError && (
+          <p className="text-sm text-red-600 dark:text-red-400">{defaultModelError}</p>
+        )}
       </div>
     </div>
   );

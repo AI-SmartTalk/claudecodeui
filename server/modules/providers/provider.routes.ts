@@ -375,6 +375,25 @@ const parseChangeActiveModelPayload = (payload: unknown): ProviderChangeActiveMo
   };
 };
 
+const parseDefaultModelPayload = (payload: unknown): string => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const model = readOptionalQueryString((payload as Record<string, unknown>).model);
+  if (!model) {
+    throw new AppError('model is required.', {
+      code: 'MODEL_REQUIRED',
+      statusCode: 400,
+    });
+  }
+
+  return model;
+};
+
 router.get(
   '/:provider/auth/status',
   asyncHandler(async (req: Request, res: Response) => {
@@ -391,6 +410,24 @@ router.get(
     const bypassCache = parseOptionalBooleanQuery(req.query.bypassCache, 'bypassCache') ?? false;
     const result = await providerModelsService.getProviderModels(provider, { bypassCache });
     res.json(createApiSuccessResponse({ provider, models: result.models, cache: result.cache }));
+  }),
+);
+
+router.get(
+  '/default-models',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const models = await providerModelsService.getDefaultModels();
+    res.json(createApiSuccessResponse({ models }));
+  }),
+);
+
+router.put(
+  '/:provider/default-model',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const model = parseDefaultModelPayload(req.body);
+    const models = await providerModelsService.setDefaultModel(provider, model);
+    res.json(createApiSuccessResponse({ provider, model, models }));
   }),
 );
 

@@ -15,6 +15,13 @@ import {
   FALLBACK_PROVIDER_EFFORT_VALUES,
   toProviderEffortOptions,
 } from '../constants/providerEffort';
+import {
+  DEFAULT_MODELS_CHANGED_EVENT,
+  cacheDefaultModels,
+  fetchDefaultModels,
+  saveDefaultModel,
+} from '../../../utils/defaultModels';
+import type { DefaultModelMap } from '../../../utils/defaultModels';
 
 const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   claude: 'default',
@@ -163,6 +170,51 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     ));
     localStorage.setItem(`${targetProvider}-effort`, effort);
   }, []);
+
+  /**
+   * Applies the server-side per-provider defaults. Called on mount and whenever
+   * another view (Settings, the `/model` modal) changes them, so the composer
+   * never drifts from what Settings displays.
+   */
+  const applyDefaultModels = useCallback((models: DefaultModelMap) => {
+    for (const [targetProvider, model] of Object.entries(models)) {
+      if (model) {
+        setStoredProviderModel(targetProvider as LLMProvider, model);
+      }
+    }
+  }, [setStoredProviderModel]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchDefaultModels()
+      .then((models) => {
+        if (cancelled) {
+          return;
+        }
+        cacheDefaultModels(models);
+        applyDefaultModels(models);
+      })
+      .catch((error: unknown) => {
+        // Non-fatal: the cached localStorage value keeps the composer usable.
+        console.error('Error loading default models:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyDefaultModels]);
+
+  useEffect(() => {
+    const handleDefaultModelsChanged = (event: Event) => {
+      applyDefaultModels((event as CustomEvent<DefaultModelMap>).detail ?? {});
+    };
+
+    window.addEventListener(DEFAULT_MODELS_CHANGED_EVENT, handleDefaultModelsChanged);
+    return () => {
+      window.removeEventListener(DEFAULT_MODELS_CHANGED_EVENT, handleDefaultModelsChanged);
+    };
+  }, [applyDefaultModels]);
 
   const loadProviderModels = useCallback(async (options: { bypassCache?: boolean } = {}) => {
     const requestId = providerModelsRequestIdRef.current + 1;
@@ -520,6 +572,9 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     const normalizedSessionId = typeof sessionId === 'string' ? sessionId.trim() : '';
     if (!normalizedSessionId) {
       setStoredProviderModel(targetProvider, model);
+      // Outside a session the pick *is* the provider default, so persist it
+      // server-side; Settings reads the same value.
+      await saveDefaultModel(targetProvider, model);
       return {
         scope: 'default' as const,
         changed: false,

@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { appConfigDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type {
@@ -13,11 +14,39 @@ import type {
   ProviderModelsResult,
   ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
-import { readProviderSessionActiveModelChange } from '@/shared/utils.js';
+import { AppError, readProviderSessionActiveModelChange } from '@/shared/utils.js';
 
 export const PROVIDER_MODELS_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 const PROVIDER_MODELS_CACHE_VERSION = 2;
 const UNCACHED_PROVIDERS = new Set<LLMProvider>(['claude']);
+
+/** app_config key holding the per-provider default model map. */
+const DEFAULT_MODELS_CONFIG_KEY = 'provider_default_models';
+
+const readStoredDefaultModels = (): Partial<Record<LLMProvider, string>> => {
+  const raw = appConfigDb.get(DEFAULT_MODELS_CONFIG_KEY);
+  if (!raw) {
+    return {};
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, value]) => typeof value === 'string' && value.trim()),
+    ) as Partial<Record<LLMProvider, string>>;
+  } catch {
+    // A corrupted value must not break model listing; fall back to catalog defaults.
+    return {};
+  }
+};
+
+const writeStoredDefaultModels = (models: Partial<Record<LLMProvider, string>>): void => {
+  appConfigDb.set(DEFAULT_MODELS_CONFIG_KEY, JSON.stringify(models));
+};
 
 type ProviderModelsServiceDependencies = {
   resolveProvider?: (provider: LLMProvider) => Pick<IProvider, 'models'>;
@@ -320,6 +349,48 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     filePath: activeModelChangesPath,
   });
 
+  /**
+   * Returns the user-configured default model per provider, falling back to
+   * each provider catalog's own DEFAULT when nothing has been configured.
+   *
+   * This is the model new conversations start on; per-session overrides are
+   * handled separately by `changeActiveModel`.
+   */
+  const getDefaultModels = async (): Promise<Record<LLMProvider, string>> => {
+    const stored = readStoredDefaultModels();
+    const providers = providerRegistry.listProviders().map((entry) => entry.id);
+
+    const resolved = await Promise.all(providers.map(async (provider) => {
+      const { models } = await getProviderModels(provider);
+      const configured = stored[provider];
+      const isKnown = configured
+        ? models.OPTIONS.some((option) => option.value === configured)
+        : false;
+
+      return [provider, isKnown ? configured : models.DEFAULT] as const;
+    }));
+
+    return Object.fromEntries(resolved) as Record<LLMProvider, string>;
+  };
+
+  const setDefaultModel = async (
+    provider: LLMProvider,
+    model: string,
+  ): Promise<Record<LLMProvider, string>> => {
+    const normalizedModel = model.trim();
+    const { models } = await getProviderModels(provider);
+
+    if (!models.OPTIONS.some((option) => option.value === normalizedModel)) {
+      throw new AppError(`Model "${normalizedModel}" is not available for provider "${provider}".`, {
+        code: 'UNSUPPORTED_MODEL',
+        statusCode: 400,
+      });
+    }
+
+    writeStoredDefaultModels({ ...readStoredDefaultModels(), [provider]: normalizedModel });
+    return getDefaultModels();
+  };
+
   const resolveResumeModel = async (
     provider: LLMProvider,
     sessionId: string | undefined,
@@ -350,6 +421,8 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     getCurrentActiveModel,
     getChangedActiveModel,
     changeActiveModel,
+    getDefaultModels,
+    setDefaultModel,
     resolveResumeModel,
     clearCache,
   };

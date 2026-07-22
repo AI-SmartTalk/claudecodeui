@@ -1,3 +1,6 @@
+import type { DefaultModelMap, LLMProvider } from '@/shared/types';
+import { DEFAULT_MODELS_CHANGED_EVENT } from '@/shared/constants';
+import { cacheDefaultModels } from '@/shared/utils';
 import {
   expireAuthSession,
   getStoredAuthToken,
@@ -624,3 +627,58 @@ export function synthesizeVoice(text: string, signal: AbortSignal): Promise<Resp
 
   return api.voice.tts(text, { headers: voiceConfigHeaders(), signal });
 }
+
+//----------------- DEFAULT PROVIDER MODELS ------------
+
+/** Loads the defaults shared by chat and settings. */
+type DefaultModelsApiResponse = {
+  success?: boolean;
+  data?: {
+    models?: DefaultModelMap;
+  };
+};
+
+const readModelMap = (payload: unknown): DefaultModelMap => {
+  if (!payload || typeof payload !== 'object') {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(payload as Record<string, unknown>)
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim() !== ''),
+  ) as DefaultModelMap;
+};
+
+export const fetchDefaultModels = async (): Promise<DefaultModelMap> => {
+  const response = await authenticatedFetch('/api/providers/default-models');
+  const body = (await response.json()) as DefaultModelsApiResponse;
+  if (!response.ok || !body.success) {
+    throw new Error('Unable to load the default models.');
+  }
+
+  return readModelMap(body.data?.models);
+};
+
+/**
+ * Persists the provider default server-side, then mirrors and announces it so
+ * every open view (Settings, composer, `/model` modal) converges immediately.
+ */
+export const saveDefaultModel = async (
+  provider: LLMProvider,
+  model: string,
+): Promise<DefaultModelMap> => {
+  const response = await authenticatedFetch(`/api/providers/${provider}/default-model`, {
+    method: 'PUT',
+    body: JSON.stringify({ model }),
+  });
+
+  const body = (await response.json()) as DefaultModelsApiResponse;
+  if (!response.ok || !body.success) {
+    throw new Error('Unable to save the default model.');
+  }
+
+  const models = readModelMap(body.data?.models);
+  cacheDefaultModels(models);
+  window.dispatchEvent(new CustomEvent<DefaultModelMap>(DEFAULT_MODELS_CHANGED_EVENT, { detail: models }));
+  return models;
+};

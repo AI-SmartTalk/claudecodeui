@@ -336,7 +336,13 @@
       "button": "Se connecter",
       "reLoginButton": "Se reconnecter"
     },
-    "error": "Erreur : {{error}}"
+    "error": "Erreur : {{error}}",
+    "defaultModel": {
+      "title": "Modèle par défaut",
+      "description": "Modèle utilisé au démarrage des nouvelles conversations {{agent}}. Dans une conversation, /model reste prioritaire pour cette session uniquement.",
+      "loading": "Chargement des modèles...",
+      "unavailable": "Aucun modèle disponible pour cet agent."
+    }
   },
   "permissions": {
     "title": "Paramètres de permission",

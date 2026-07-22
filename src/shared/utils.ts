@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-import type { Project, ProjectSession } from '@/shared/types';
+import type { DefaultModelMap, LLMProvider, Project, ProjectSession } from '@/shared/types';
 
 //----------------- DEPLOYMENT MODE ------------
 
@@ -223,3 +223,18 @@ export const getPageTitle = (
   const displayName = selectedProject?.displayName?.trim();
   return displayName ? `${displayName} - ${DEFAULT_PAGE_TITLE}` : DEFAULT_PAGE_TITLE;
 };
+
+//----------------- DEFAULT PROVIDER MODELS ------------
+
+/** Returns the local cache key for a provider’s default model. */
+export const modelStorageKey = (provider: LLMProvider): string => `${provider}-model`;
+
+/** Mirrors the server-side defaults into localStorage so the next paint is correct. */
+export const cacheDefaultModels = (models: DefaultModelMap): void => {
+  for (const [provider, model] of Object.entries(models)) {
+    if (model) {
+      localStorage.setItem(modelStorageKey(provider as LLMProvider), model);
+    }
+  }
+};
+

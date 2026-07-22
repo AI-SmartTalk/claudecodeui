@@ -218,3 +218,8 @@ export const PROVIDER_PERMISSION_PREFERENCE_KEYS: Record<LLMProvider, UserPrefer
   codex: 'codexPermissions',
   opencode: 'opencodePermissions',
 };
+
+//----------------- DEFAULT PROVIDER MODELS ------------
+
+/** Synchronizes default-model changes between chat and settings. */
+export const DEFAULT_MODELS_CHANGED_EVENT = 'cloudcli:default-models-changed';

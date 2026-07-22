@@ -4,6 +4,7 @@ import type { Project } from '../../../types/app';
 import type { SubagentChildTool } from '../types/types';
 
 import { getToolConfig } from './configs/toolConfigs';
+import { isSubagentToolName } from '../utils/subagent';
 import { OneLineDisplay, BashCommandDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from './components';
 import { PlanDisplay } from './components/PlanDisplay';
 import { ToolStatusBadge } from './components/ToolStatusBadge';
@@ -40,7 +41,7 @@ function getToolCategory(toolName: string): string {
   if (toolName === 'Bash') return 'bash';
   if (['TodoWrite', 'TodoRead'].includes(toolName)) return 'todo';
   if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(toolName)) return 'task';
-  if (toolName === 'Task') return 'agent';
+  if (isSubagentToolName(toolName)) return 'agent';
   if (toolName === 'exit_plan_mode' || toolName === 'ExitPlanMode') return 'plan';
   if (toolName === 'AskUserQuestion') return 'question';
   return 'default';
@@ -114,6 +115,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     if (mode === 'result') return null;
     return (
       <SubagentContainer
+        toolName={toolName}
         toolInput={toolInput}
         toolResult={toolResult}
         subagentState={subagentState}

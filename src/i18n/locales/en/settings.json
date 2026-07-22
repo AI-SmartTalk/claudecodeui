@@ -362,7 +362,13 @@
       "button": "Login",
       "reLoginButton": "Re-login"
     },
-    "error": "Error: {{error}}"
+    "error": "Error: {{error}}",
+    "defaultModel": {
+      "title": "Default model",
+      "description": "Model new {{agent}} conversations start on. Inside a conversation, /model still overrides it for that session only.",
+      "loading": "Loading models...",
+      "unavailable": "No models available for this agent."
+    }
   },
   "permissions": {
     "title": "Permission Settings",

@@ -9,6 +9,7 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from "../../../../types/app";
+import { modelStorageKey, saveDefaultModel } from "../../../../utils/defaultModels";
 import LLMProviderLogo from "../../../llm-provider-logo/LLMProviderLogo";
 import { NextTaskBanner } from "../../../task-master";
 import {
@@ -166,17 +167,20 @@ export default function ProviderSelectionEmptyState({
     (providerId: LLMProvider, modelValue: string) => {
       if (providerId === "claude") {
         setClaudeModel(modelValue);
-        localStorage.setItem("claude-model", modelValue);
       } else if (providerId === "codex") {
         setCodexModel(modelValue);
-        localStorage.setItem("codex-model", modelValue);
       } else if (providerId === "opencode") {
         setOpenCodeModel(modelValue);
-        localStorage.setItem("opencode-model", modelValue);
       } else {
         setCursorModel(modelValue);
-        localStorage.setItem("cursor-model", modelValue);
       }
+
+      localStorage.setItem(modelStorageKey(providerId), modelValue);
+      // Picking here sets the provider default, so persist it server-side too;
+      // Settings → Agents → Account reads the same value.
+      saveDefaultModel(providerId, modelValue).catch((error: unknown) => {
+        console.error("Error saving the default model:", error);
+      });
     },
     [setClaudeModel, setCursorModel, setCodexModel, setOpenCodeModel],
   );

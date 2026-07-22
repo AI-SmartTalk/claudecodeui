@@ -117,8 +117,33 @@ async function getSessionMessages(
     }
 
     const projectDir = path.dirname(jsonLPath);
-    const files = await fsp.readdir(projectDir);
-    const agentFiles = files.filter((file) => file.endsWith('.jsonl') && file.startsWith('agent-'));
+
+    // Subagent transcripts moved into `<session-id>/subagents/` in current Claude
+    // Code releases; older ones wrote `agent-<id>.jsonl` beside the session file.
+    // Index both layouts, newest first, so nesting works whichever wrote the
+    // transcript. A missing directory is normal (a session may spawn no agents).
+    const agentFilePaths = new Map<string, string>();
+    const searchDirs = [
+      path.join(projectDir, path.basename(jsonLPath, '.jsonl'), 'subagents'),
+      projectDir,
+    ];
+    for (const dir of searchDirs) {
+      let entries: string[];
+      try {
+        entries = await fsp.readdir(dir);
+      } catch {
+        continue;
+      }
+      for (const file of entries) {
+        if (!file.startsWith('agent-') || !file.endsWith('.jsonl')) {
+          continue;
+        }
+        const agentId = file.slice('agent-'.length, -'.jsonl'.length);
+        if (!agentFilePaths.has(agentId)) {
+          agentFilePaths.set(agentId, path.join(dir, file));
+        }
+      }
+    }
 
     const messages: AnyRecord[] = [];
     const agentToolsCache = new Map<string, AnyRecord[]>();
@@ -153,12 +178,11 @@ async function getSessionMessages(
     }
 
     for (const agentId of agentIds) {
-      const agentFileName = `agent-${agentId}.jsonl`;
-      if (!agentFiles.includes(agentFileName)) {
+      const agentFilePath = agentFilePaths.get(agentId);
+      if (!agentFilePath) {
         continue;
       }
 
-      const agentFilePath = path.join(projectDir, agentFileName);
       const tools = await parseAgentTools(agentFilePath);
       agentToolsCache.set(agentId, tools);
     }

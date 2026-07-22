@@ -6,6 +6,7 @@
 import type { NormalizedMessage } from '../../../stores/useSessionStore';
 import type { ChatMessage, SubagentChildTool } from '../types/types';
 import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } from '../utils/chatFormatting';
+import { isSubagentToolName } from '../utils/subagent';
 
 function formatToolResultContent(content: unknown): string {
   const text = typeof content === 'string' ? content : JSON.stringify(content);
@@ -79,7 +80,38 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
     }
   }
 
+  // Second pass: bucket a live subagent's tool calls under the Task that spawned
+  // them. During a live run the SDK streams subagent activity as ordinary
+  // top-level messages tagged with parentToolUseId; without this they render as
+  // flat siblings of the Task. History replay has no parentToolUseId — the
+  // provider attaches msg.subagentTools from the agent-<id>.jsonl transcript
+  // instead — so both shapes are merged below.
+  const liveChildTools = new Map<string, SubagentChildTool[]>();
   for (const msg of messages) {
+    if (msg.kind !== 'tool_use' || !msg.parentToolUseId || !msg.toolId) continue;
+
+    const childResult = msg.toolResult || toolResultMap.get(msg.toolId);
+    const siblings = liveChildTools.get(msg.parentToolUseId) ?? [];
+    siblings.push({
+      toolId: msg.toolId,
+      toolName: msg.toolName || 'Tool',
+      toolInput: msg.toolInput,
+      toolResult: childResult
+        ? {
+            content: formatToolResultContent(childResult.content),
+            isError: Boolean(childResult.isError),
+          }
+        : null,
+      timestamp: new Date(msg.timestamp ?? Date.now()),
+    });
+    liveChildTools.set(msg.parentToolUseId, siblings);
+  }
+
+  for (const msg of messages) {
+    // Everything a subagent emits — tool calls, their results, its text and
+    // thinking — belongs inside its Task container, not the top-level thread.
+    if (msg.parentToolUseId) continue;
+
     const sharedMetadata = {
       displayText: msg.displayText,
       commandName: msg.commandName,
@@ -143,9 +175,11 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
       case 'tool_use': {
         const tr = msg.toolResult || (msg.toolId ? toolResultMap.get(msg.toolId) : null);
-        const isSubagentContainer = msg.toolName === 'Task';
+        const isSubagentContainer = isSubagentToolName(msg.toolName);
 
-        // Build child tools from subagentTools
+        // Build child tools from subagentTools (history) merged with anything
+        // streamed live under this Task's toolId, de-duped by toolId so a
+        // session reload mid-run cannot list the same call twice.
         const childTools: SubagentChildTool[] = [];
         if (isSubagentContainer && msg.subagentTools && Array.isArray(msg.subagentTools)) {
           for (const tool of msg.subagentTools as any[]) {
@@ -156,6 +190,13 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
               toolResult: tool.toolResult || null,
               timestamp: new Date(tool.timestamp || Date.now()),
             });
+          }
+        }
+        if (isSubagentContainer && msg.toolId) {
+          for (const child of liveChildTools.get(msg.toolId) ?? []) {
+            if (!childTools.some((existing) => existing.toolId === child.toolId)) {
+              childTools.push(child);
+            }
           }
         }
 

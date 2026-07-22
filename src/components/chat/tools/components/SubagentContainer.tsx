@@ -1,9 +1,11 @@
 import React from 'react';
 import type { SubagentChildTool } from '../../types/types';
 import { CollapsibleSection } from './CollapsibleSection';
+import { ToolStatusBadge } from './ToolStatusBadge';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../../../../shared/view/ui';
 
 interface SubagentContainerProps {
+  toolName?: string;
   toolInput: unknown;
   toolResult?: { content?: unknown; isError?: boolean } | null;
   subagentState: {
@@ -30,6 +32,7 @@ const getCompactToolDisplay = (toolName: string, toolInput: unknown): string => 
     case 'Bash':
       const cmd = input.command || '';
       return cmd.length > 40 ? `${cmd.slice(0, 40)}...` : cmd;
+    case 'Agent':
     case 'Task':
       return input.description || input.subagent_type || '';
     case 'WebFetch':
@@ -41,6 +44,7 @@ const getCompactToolDisplay = (toolName: string, toolInput: unknown): string => 
 };
 
 export const SubagentContainer: React.FC<SubagentContainerProps> = ({
+  toolName = 'Agent',
   toolInput,
   toolResult,
   subagentState,
@@ -61,8 +65,9 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
     <div className="my-1 border-l-2 border-l-purple-500 py-0.5 pl-3 dark:border-l-purple-400">
       <CollapsibleSection
         title={title}
-        toolName="Task"
-        open={false}
+        toolName={toolName}
+        open={!isComplete}
+        badge={!isComplete ? <ToolStatusBadge status="running" /> : undefined}
       >
         {/* Prompt/request to the subagent */}
         {prompt && (
@@ -71,19 +76,27 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
           </div>
         )}
 
-        {/* Current tool indicator (while running) */}
-        {currentTool && !isComplete && (
+        {/* Liveness indicator. The pulse must not wait on the first child tool:
+            a subagent that has only just started has no tool to name yet, which
+            is exactly when its progress is most in doubt. */}
+        {!isComplete && (
           <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />
-            <span className="text-muted-foreground/60">Currently:</span>
-            <span className="font-medium text-foreground">{currentTool.toolName}</span>
-            {getCompactToolDisplay(currentTool.toolName, currentTool.toolInput) && (
+            {currentTool ? (
               <>
-                <span className="text-muted-foreground/40">/</span>
-                <span className="truncate font-mono text-muted-foreground">
-                  {getCompactToolDisplay(currentTool.toolName, currentTool.toolInput)}
-                </span>
+                <span className="text-muted-foreground/60">Currently:</span>
+                <span className="font-medium text-foreground">{currentTool.toolName}</span>
+                {getCompactToolDisplay(currentTool.toolName, currentTool.toolInput) && (
+                  <>
+                    <span className="text-muted-foreground/40">/</span>
+                    <span className="truncate font-mono text-muted-foreground">
+                      {getCompactToolDisplay(currentTool.toolName, currentTool.toolInput)}
+                    </span>
+                  </>
+                )}
               </>
+            ) : (
+              <span className="text-muted-foreground/60">Starting…</span>
             )}
           </div>
         )}

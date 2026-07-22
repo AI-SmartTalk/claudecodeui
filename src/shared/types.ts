@@ -1768,3 +1768,8 @@ type TaskStatus =
 
 /** A TaskMaster task's priority; high, medium and low are the known values and the string fallback tolerates anything else TaskMaster emits. */
 type TaskPriority = 'high' | 'medium' | 'low' | string;
+
+//----------------- DEFAULT PROVIDER MODELS ------------
+
+/** Server-backed default model selection for each provider, used by chat and settings. */
+export type DefaultModelMap = Partial<Record<LLMProvider, string>>;

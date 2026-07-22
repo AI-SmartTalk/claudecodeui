@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-import type { Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
+import type { DefaultModelMap, LLMProvider, Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
 
 //----------------- DEPLOYMENT MODE ------------
 
@@ -246,3 +246,20 @@ export const getQuickSettingsTabId = (tab: QuickSettingsTab): string => `quick-s
 
 /** DOM id of the tabpanel a quick settings tab controls; pairs with `getQuickSettingsTabId`. */
 export const getQuickSettingsTabPanelId = (tab: QuickSettingsTab): string => `quick-settings-tabpanel-${tab}`;
+
+// ---------------------------
+
+//----------------- DEFAULT PROVIDER MODELS ------------
+
+/** Returns the local cache key for a provider’s default model. */
+export const modelStorageKey = (provider: LLMProvider): string => `${provider}-model`;
+
+/** Mirrors the server-side defaults into localStorage so the next paint is correct. */
+export const cacheDefaultModels = (models: DefaultModelMap): void => {
+  for (const [provider, model] of Object.entries(models)) {
+    if (model) {
+      localStorage.setItem(modelStorageKey(provider as LLMProvider), model);
+    }
+  }
+};
+

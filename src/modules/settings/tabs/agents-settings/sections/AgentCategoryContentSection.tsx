@@ -1,4 +1,4 @@
-import type { AgentCategory, AgentContextByProvider, AgentProvider, AgentSettingsProject, ClaudePermissionsState, CodexPermissionMode, CursorPermissionsState, McpProject, SkillsProject } from '@/shared/types';
+import type { ProviderModelOption, AgentCategory, AgentContextByProvider, AgentProvider, AgentSettingsProject, ClaudePermissionsState, CodexPermissionMode, CursorPermissionsState, McpProject, SkillsProject } from '@/shared/types';
 import { McpServers } from '@/modules/mcp';
 import { ProviderSkills } from '@/modules/skills';
 import AccountContent from '@/modules/settings/tabs/agents-settings/sections/content/AccountContent';
@@ -15,6 +15,13 @@ type AgentCategoryContentSectionProps = {
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   projects: AgentSettingsProject[];
+  /** Default-model state for the currently selected agent. */
+  defaultModel?: string;
+  modelOptions: ProviderModelOption[];
+  onSelectDefaultModel: (model: string) => void;
+  defaultModelLoading: boolean;
+  savingDefaultModel: boolean;
+  defaultModelError: string | null;
 };
 
 /** Rendered by AgentsSettingsTab to show the panel for the selected provider and category. */
@@ -29,6 +36,12 @@ export default function AgentCategoryContentSection({
   codexPermissionMode,
   onCodexPermissionModeChange,
   projects,
+  defaultModel,
+  modelOptions,
+  onSelectDefaultModel,
+  defaultModelLoading,
+  savingDefaultModel,
+  defaultModelError,
 }: AgentCategoryContentSectionProps) {
   return (
     <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-4">
@@ -37,6 +50,12 @@ export default function AgentCategoryContentSection({
           agent={selectedAgent}
           authStatus={agentContextById[selectedAgent].authStatus}
           onLogin={agentContextById[selectedAgent].onLogin}
+          defaultModel={defaultModel}
+          modelOptions={modelOptions}
+          onSelectDefaultModel={onSelectDefaultModel}
+          defaultModelLoading={defaultModelLoading}
+          savingDefaultModel={savingDefaultModel}
+          defaultModelError={defaultModelError}
         />
       )}
 

@@ -41,12 +41,15 @@ ARG CLAUDE_CLI_VERSION=latest
 # else on a host that may run unrelated containers.
 LABEL org.opencontainers.image.title="CloudCLI"
 
+# WORKSPACES_ROOT defaults to $HOME in the app, which makes it reject every
+# project under the workspace volume — the very place repositories are cloned.
 ENV NODE_ENV=production \
     SERVER_PORT=3001 \
     HOST=0.0.0.0 \
     DATABASE_PATH=/home/node/.cloudcli/auth.db \
     CLAUDE_CONFIG_DIR=/home/node/.claude \
-    HOME=/home/node
+    HOME=/home/node \
+    WORKSPACES_ROOT=/workspace
 
 # git and openssh-client are what makes the remote workspace usable at all;
 # ripgrep backs the in-app search when @vscode/ripgrep cannot fetch its binary.

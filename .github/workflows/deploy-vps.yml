@@ -1,0 +1,180 @@
+name: Deploy VPS
+
+# Manual on purpose: a deploy restarts the container, which drops any live
+# agent session. The operator decides when that is acceptable.
+on:
+  workflow_dispatch:
+    inputs:
+      provision_host:
+        description: "Run host provisioning (packages, Docker, Tailscale, firewall)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+env:
+  INSTALL_DIR: /opt/cloudcli
+
+jobs:
+  build:
+    name: Build image
+    # Never self-hosted: that runner lives on the production box.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Compute image reference
+        id: meta
+        run: |
+          repository=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          echo "image=ghcr.io/${repository}:sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "latest=ghcr.io/${repository}:latest" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}
+            ${{ steps.meta.outputs.latest }}
+          cache-from: type=gha,scope=vps
+          cache-to: type=gha,mode=max,scope=vps
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ vars.VPS_SSH_USER || 'root' }}
+          KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          # Without these the failure surfaces much later as an unreadable
+          # ssh-keyscan or connection error.
+          for required in VPS_HOST SSH_KEY; do
+            if [ -z "${!required}" ]; then
+              echo "::error::Missing secret: ${required/SSH_KEY/VPS_SSH_PRIVATE_KEY}"
+              exit 1
+            fi
+          done
+
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          if [ -n "$KNOWN_HOSTS" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::VPS_SSH_KNOWN_HOSTS is unset — trusting whatever host key answers. Set it to pin the server."
+            ssh-keyscan -H "$VPS_HOST" > ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+          cat > ~/.ssh/config <<EOF
+          Host vps
+            HostName $VPS_HOST
+            User $VPS_USER
+            IdentityFile ~/.ssh/deploy_key
+            BatchMode yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 20
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Resolve privilege escalation
+        run: |
+          if ssh vps 'test "$(id -u)" -eq 0'; then
+            echo "SUDO=" >> "$GITHUB_ENV"
+          else
+            echo "SUDO=sudo" >> "$GITHUB_ENV"
+          fi
+
+      - name: Upload deployment assets
+        run: |
+          ssh vps "$SUDO install -d -m 750 $INSTALL_DIR"
+          tar -czf - -C deploy compose.yml scripts | ssh vps "$SUDO tar -xzf - -C $INSTALL_DIR"
+          ssh vps "$SUDO chmod +x $INSTALL_DIR/scripts/bootstrap.sh $INSTALL_DIR/scripts/deploy.sh"
+
+      - name: Provision host
+        if: inputs.provision_host
+        env:
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+          TAILSCALE_HOSTNAME: ${{ vars.TAILSCALE_HOSTNAME || 'cloudcli' }}
+          MANAGE_FIREWALL: ${{ vars.MANAGE_FIREWALL || 'false' }}
+        run: |
+          # Secrets travel through the environment into a 0600 file, never
+          # through argv where any local process could read them.
+          emit() {
+            if [ -n "$2" ]; then printf '%s=%s\n' "$1" "$2"; fi
+          }
+          {
+            emit TAILSCALE_AUTHKEY "$TAILSCALE_AUTHKEY"
+            emit TAILSCALE_HOSTNAME "$TAILSCALE_HOSTNAME"
+            emit MANAGE_FIREWALL "$MANAGE_FIREWALL"
+          } | ssh vps "$SUDO install -m 600 /dev/stdin /run/cloudcli-bootstrap.env"
+
+          ssh vps "$SUDO bash $INSTALL_DIR/scripts/bootstrap.sh"
+
+      - name: Deploy application
+        env:
+          CLOUDCLI_IMAGE: ${{ needs.build.outputs.image }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLOUDCLI_ADMIN_USERNAME: ${{ secrets.CLOUDCLI_ADMIN_USERNAME }}
+          CLOUDCLI_ADMIN_PASSWORD: ${{ secrets.CLOUDCLI_ADMIN_PASSWORD }}
+          CLOUDCLI_JWT_SECRET: ${{ secrets.CLOUDCLI_JWT_SECRET }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          emit() {
+            if [ -n "$2" ]; then printf '%s=%s\n' "$1" "$2"; fi
+          }
+          {
+            emit CLOUDCLI_IMAGE "$CLOUDCLI_IMAGE"
+            emit GHCR_USERNAME "$GHCR_USERNAME"
+            emit GHCR_TOKEN "$GHCR_TOKEN"
+            emit CLOUDCLI_ADMIN_USERNAME "$CLOUDCLI_ADMIN_USERNAME"
+            emit CLOUDCLI_ADMIN_PASSWORD "$CLOUDCLI_ADMIN_PASSWORD"
+            emit CLOUDCLI_JWT_SECRET "$CLOUDCLI_JWT_SECRET"
+            emit ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
+            emit OPENAI_API_KEY "$OPENAI_API_KEY"
+          } | ssh vps "$SUDO install -m 600 /dev/stdin /run/cloudcli-deploy.env"
+
+          ssh vps "$SUDO bash $INSTALL_DIR/scripts/deploy.sh"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### CloudCLI"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Image | \`${{ needs.build.outputs.image }}\` |"
+            echo "| Host provisioning | ${{ inputs.provision_host && 'ran' || 'skipped' }} |"
+            echo ""
+            echo "Reachable over the tailnet only — there is no public listener."
+          } >> "$GITHUB_STEP_SUMMARY"

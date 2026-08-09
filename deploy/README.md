@@ -27,10 +27,16 @@ before acting, so both can be replayed at will.
 
 1. **A dedicated VPS** (Debian or Ubuntu), reachable over SSH with a key. Give
    it nothing else to run — this box hands a shell to an agent.
-2. **A Tailscale tailnet** with **MagicDNS** and **HTTPS certificates** enabled
-   (Admin console → DNS). `tailscale serve` cannot issue a certificate without
-   them, and the deploy stops with that exact message if they are missing.
-3. **A reusable Tailscale auth key** (Admin console → Settings → Keys).
+2. **A Tailscale tailnet**. The app is published on the host's tailnet IP, so
+   any tailnet member reaches it over WireGuard-encrypted transport — no admin
+   rights required.
+
+   If the tailnet additionally has **MagicDNS** and **HTTPS certificates**
+   enabled (Admin console → DNS), the deploy also publishes an
+   `https://<host>.<tailnet>.ts.net` name via `tailscale serve`. That is a
+   convenience: when the tailnet declines, the deploy says so and carries on.
+3. **A reusable Tailscale auth key** (Admin console → Settings → Keys) — only
+   for the first run. A host already on the tailnet needs none.
 
 ## Secrets
 
@@ -117,9 +123,10 @@ State lives in two named volumes and survives every image rollout:
   `POST /api/auth/register` until a first user exists — an unclaimed instance
   hands a shell to whoever reaches it first. `seed-admin.cjs` closes that window
   during the deploy. Set the two admin secrets before the first run.
-- **No public listener.** The container publishes to `127.0.0.1` only, and UFW
-  denies incoming traffic except SSH and the tailnet interface. Even a flushed
-  firewall would not expose the app.
+- **No public listener.** The container publishes on the host's tailnet IP —
+  or on `127.0.0.1` when the host has no tailnet — never on `0.0.0.0`. The app
+  stays off the public internet even with the firewall flushed, and reaching it
+  means being a member of the tailnet.
 - **Secrets never reach argv.** They are written to a `0600` file under `/run`,
   sourced by the script, and deleted by its `EXIT` trap.
 - **The Docker socket is not mounted.** The in-app Docker panel therefore stays

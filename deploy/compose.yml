@@ -7,10 +7,12 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    # Bound to loopback on purpose: Tailscale Serve is the only front door, so
-    # the app is unreachable from the public internet even if UFW is flushed.
+    # Never 0.0.0.0: the bind address is either the host's tailnet IP — reachable
+    # only by tailnet members, over WireGuard-encrypted transport — or loopback
+    # when the host has no tailnet. Either way the app stays off the public
+    # internet even if the firewall is flushed. Resolved by deploy.sh.
     ports:
-      - "127.0.0.1:${CLOUDCLI_HOST_PORT:-3001}:3001"
+      - "${CLOUDCLI_BIND_ADDR:-127.0.0.1}:${CLOUDCLI_HOST_PORT:-3001}:3001"
     volumes:
       # Carries auth.db, Claude Code sessions, git and SSH config — everything
       # that must survive an image rollout.

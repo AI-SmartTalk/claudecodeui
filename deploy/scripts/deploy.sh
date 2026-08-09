@@ -153,13 +153,24 @@ seed_admin_account() {
 expose_on_tailnet() {
   log "Tailnet route"
   local target="http://127.0.0.1:${HOST_PORT}"
+  local tunnel="ssh -L ${HOST_PORT}:127.0.0.1:${HOST_PORT} <host>, then http://localhost:${HOST_PORT}"
+
+  # Publishing depends on tailnet-wide settings this script cannot flip. The app
+  # is already deployed and healthy at this point, so a route we cannot create
+  # is a warning, not a failed deploy — it stays reachable through an SSH tunnel.
+  if ! tailscale status >/dev/null 2>&1; then
+    warn "host is not on a tailnet — reach the app with: ${tunnel}"
+    return 0
+  fi
 
   if tailscale serve status 2>/dev/null | grep -q "127.0.0.1:${HOST_PORT}"; then
     skip "already served over HTTPS"
-  elif ! tailscale serve --bg --https=443 "${target}"; then
-    die "tailscale serve failed. Enable MagicDNS and HTTPS certificates for the tailnet in the Tailscale admin console, then rerun."
-  else
+  elif tailscale serve --bg --https=443 "${target}"; then
     ok "served over HTTPS on the tailnet"
+  else
+    warn "tailscale serve refused: enable MagicDNS and HTTPS certificates in the Tailscale admin console."
+    warn "until then, reach the app with: ${tunnel}"
+    return 0
   fi
 
   # Best-effort display only: a failure to resolve the name must not fail a

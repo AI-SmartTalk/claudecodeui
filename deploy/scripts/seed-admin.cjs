@@ -14,11 +14,8 @@
   const username = process.env.ADMIN_USERNAME;
   const password = process.env.ADMIN_PASSWORD;
 
-  if (!username || !password) {
-    console.error('  ✗ ADMIN_USERNAME and ADMIN_PASSWORD must both be set');
-    process.exit(1);
-  }
-
+  // State first, credentials second: an already-claimed instance needs nothing,
+  // and claiming that registration is open when it is not would be a lie.
   const statusResponse = await fetch(`${baseUrl}/api/auth/status`);
   if (!statusResponse.ok) {
     console.error(`  ✗ /api/auth/status returned ${statusResponse.status}`);
@@ -29,6 +26,11 @@
   if (!needsSetup) {
     console.log('  · account already claimed');
     return;
+  }
+
+  if (!username || !password) {
+    console.error('  ✗ instance is unclaimed and no credentials were supplied — anyone reaching it can take it over');
+    process.exit(1);
   }
 
   const registerResponse = await fetch(`${baseUrl}/api/auth/register`, {

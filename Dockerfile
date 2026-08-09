@@ -52,7 +52,13 @@ ENV NODE_ENV=production \
 # ripgrep backs the in-app search when @vscode/ripgrep cannot fetch its binary.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      ca-certificates curl git openssh-client ripgrep tini less \
+      ca-certificates curl git openssh-client ripgrep tini less gnupg \
+ && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+ && echo "deb [signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends gh \
  && rm -rf /var/lib/apt/lists/* \
  && npm install -g "@anthropic-ai/claude-code@${CLAUDE_CLI_VERSION}" \
  && npm cache clean --force

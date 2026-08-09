@@ -1,0 +1,29 @@
+name: cloudcli
+
+services:
+  app:
+    image: ${CLOUDCLI_IMAGE:?CLOUDCLI_IMAGE must be set in /opt/cloudcli/.env}
+    container_name: cloudcli
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Bound to loopback on purpose: Tailscale Serve is the only front door, so
+    # the app is unreachable from the public internet even if UFW is flushed.
+    ports:
+      - "127.0.0.1:${CLOUDCLI_HOST_PORT:-3001}:3001"
+    volumes:
+      # Carries auth.db, Claude Code sessions, git and SSH config — everything
+      # that must survive an image rollout.
+      - home:/home/node
+      - workspace:/workspace
+    # node-pty children need time to exit before the runtime kills them.
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  home:
+  workspace:

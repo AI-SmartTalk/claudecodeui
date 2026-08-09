@@ -61,6 +61,13 @@ Repository → Settings → Secrets and variables → Actions.
 |---|---|
 | `VPS_SSH_USER` | `root` |
 | `TAILSCALE_HOSTNAME` | `cloudcli` |
+| `MANAGE_FIREWALL` | `false` — see below |
+
+`MANAGE_FIREWALL` is opt-in because flipping a host's default policy is only
+safe when the host is ours alone: a shared box may publish ports this script
+knows nothing about. CloudCLI never depends on it — it binds to loopback and is
+reached through Tailscale, so the firewall hardens the machine, not the app. Set
+it to `true` on a dedicated host.
 
 No registry credentials are needed: the workflow's own `GITHUB_TOKEN` authorizes
 the pull, and the host is logged out again when the deploy ends.

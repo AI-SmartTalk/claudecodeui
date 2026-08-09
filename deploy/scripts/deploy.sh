@@ -150,6 +150,10 @@ seed_admin_account() {
     "${CONTAINER_NAME}" node -e "$(cat "${SCRIPT_DIR}/seed-admin.cjs")"
 }
 
+serve_targets_app() {
+  tailscale serve status 2>/dev/null | grep -q "127.0.0.1:${HOST_PORT}"
+}
+
 expose_on_tailnet() {
   log "Tailnet route"
   local target="http://127.0.0.1:${HOST_PORT}"
@@ -163,14 +167,20 @@ expose_on_tailnet() {
     return 0
   fi
 
-  if tailscale serve status 2>/dev/null | grep -q "127.0.0.1:${HOST_PORT}"; then
+  if serve_targets_app; then
     skip "already served over HTTPS"
-  elif tailscale serve --bg --https=443 "${target}"; then
-    ok "served over HTTPS on the tailnet"
   else
-    warn "tailscale serve refused: enable MagicDNS and HTTPS certificates in the Tailscale admin console."
-    warn "until then, reach the app with: ${tunnel}"
-    return 0
+    # `tailscale serve` prints "Serve is not enabled on your tailnet" and still
+    # exits 0, so its status proves nothing. Only the resulting config does.
+    tailscale serve --bg --https=443 "${target}" || true
+
+    if serve_targets_app; then
+      ok "served over HTTPS on the tailnet"
+    else
+      warn "the tailnet refused to publish the app — enable HTTPS certificates and Serve in the Tailscale admin console."
+      warn "until then, reach it with: ${tunnel}"
+      return 0
+    fi
   fi
 
   # Best-effort display only: a failure to resolve the name must not fail a

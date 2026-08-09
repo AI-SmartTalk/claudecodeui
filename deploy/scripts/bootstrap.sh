@@ -29,7 +29,9 @@ export DEBIAN_FRONTEND=noninteractive
 
 install_base_packages() {
   log "Base packages"
-  local wanted=(ca-certificates curl gnupg ufw unattended-upgrades)
+  # ufw is deliberately absent: it is installed by configure_firewall only when
+  # the host is ours to harden.
+  local wanted=(ca-certificates curl gnupg unattended-upgrades)
   local missing=()
   local pkg
   for pkg in "${wanted[@]}"; do
@@ -98,6 +100,18 @@ install_tailscale() {
 
 configure_firewall() {
   log "Firewall"
+
+  # Opt-in because flipping a host's default policy is only safe when the host
+  # is ours alone: a shared box may publish ports this script knows nothing
+  # about. CloudCLI does not depend on it — it binds to loopback and is reached
+  # through Tailscale, so the firewall hardens the machine, not the app.
+  if [[ ${MANAGE_FIREWALL:-false} != "true" ]]; then
+    skip "not managed (set the MANAGE_FIREWALL variable to \"true\" on a dedicated host)"
+    return 0
+  fi
+
+  dpkg -s ufw >/dev/null 2>&1 || apt-get install -y -qq --no-install-recommends ufw
+
   # Order matters: SSH is allowed before the policy flips to deny, otherwise
   # enabling UFW locks the deployment out of its own machine.
   ufw --force default deny incoming >/dev/null

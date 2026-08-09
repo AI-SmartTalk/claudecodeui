@@ -123,6 +123,7 @@ jobs:
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
           TAILSCALE_HOSTNAME: ${{ vars.TAILSCALE_HOSTNAME || 'cloudcli' }}
+          MANAGE_FIREWALL: ${{ vars.MANAGE_FIREWALL || 'false' }}
         run: |
           # Secrets travel through the environment into a 0600 file, never
           # through argv where any local process could read them.
@@ -132,6 +133,7 @@ jobs:
           {
             emit TAILSCALE_AUTHKEY "$TAILSCALE_AUTHKEY"
             emit TAILSCALE_HOSTNAME "$TAILSCALE_HOSTNAME"
+            emit MANAGE_FIREWALL "$MANAGE_FIREWALL"
           } | ssh vps "$SUDO install -m 600 /dev/stdin /run/cloudcli-bootstrap.env"
 
           ssh vps "$SUDO bash $INSTALL_DIR/scripts/bootstrap.sh"

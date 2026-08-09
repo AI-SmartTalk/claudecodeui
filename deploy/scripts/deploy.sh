@@ -171,8 +171,10 @@ expose_on_tailnet() {
 
 prune_images() {
   log "Cleanup"
-  docker image prune -f >/dev/null
-  ok "dangling images removed"
+  # Scoped to this image by label: the host may run unrelated containers whose
+  # dangling layers are none of our business.
+  docker image prune -f --filter "label=org.opencontainers.image.title=CloudCLI" >/dev/null
+  ok "superseded CloudCLI images removed"
 }
 
 # Falling back to the persisted value lets the script be replayed on the box

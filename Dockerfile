@@ -37,6 +37,10 @@ FROM node:22-bookworm-slim AS runtime
 # silent upgrade on every container restart.
 ARG CLAUDE_CLI_VERSION=latest
 
+# Lets the deploy prune its own superseded images without touching anything
+# else on a host that may run unrelated containers.
+LABEL org.opencontainers.image.title="CloudCLI"
+
 ENV NODE_ENV=production \
     SERVER_PORT=3001 \
     HOST=0.0.0.0 \

@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-import type { DefaultModelMap, LLMProvider, Project, ProjectSession } from '@/shared/types';
+import type { ChatMessage, RunningBackgroundAgent, DefaultModelMap, LLMProvider, Project, ProjectSession } from '@/shared/types';
 
 //----------------- DEPLOYMENT MODE ------------
 
@@ -238,3 +238,58 @@ export const cacheDefaultModels = (models: DefaultModelMap): void => {
   }
 };
 
+
+//----------------- BACKGROUND AGENT STATUS ------------
+
+
+const parseBackgroundAgentInput = (toolInput: unknown): Record<string, unknown> => {
+  if (typeof toolInput !== 'string') {
+    return (toolInput as Record<string, unknown>) ?? {};
+  }
+
+  try {
+    return JSON.parse(toolInput) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+};
+
+const readBackgroundAgentString = (value: unknown): string | null => (
+  typeof value === 'string' && value.trim() ? value : null
+);
+
+/** Derives running agents from normalized lifecycle metadata for the composer. */
+export function getRunningBackgroundAgents(messages: ChatMessage[]): RunningBackgroundAgent[] {
+  const running: RunningBackgroundAgent[] = [];
+
+  for (const message of messages) {
+    if (!message.isSubagentContainer || (message.subagent ? message.subagent.status !== 'running' : Boolean(message.toolResult))) {
+      continue;
+    }
+
+    const input = parseBackgroundAgentInput(message.toolInput);
+    running.push({
+      toolId: message.toolId ?? `${running.length}`,
+      agentType: readBackgroundAgentString(input.subagent_type) ?? 'Agent',
+      description: readBackgroundAgentString(input.description) ?? 'Running task',
+      startedAt: message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp ?? Date.now()),
+      toolCount: message.subagentActivity?.filter((entry) => entry.kind === 'tool').length ?? 0,
+    });
+  }
+
+  return running;
+}
+
+/** Formats an elapsed duration the way the CLI status line does (`16m 14s`). */
+export function formatElapsed(fromMs: number, nowMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor((nowMs - fromMs) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+}

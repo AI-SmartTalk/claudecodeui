@@ -353,5 +353,11 @@
     "tokensLabel_other": "tokens",
     "escClosesModal": "Esc closes the modal.",
     "close": "Close"
+  },
+  "backgroundAgents": {
+    "title_one": "{{count}} background agent running",
+    "title_other": "{{count}} background agents running",
+    "tools_one": "{{count}} tool",
+    "tools_other": "{{count}} tools"
   }
 }

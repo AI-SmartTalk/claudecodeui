@@ -1567,3 +1567,14 @@ type TaskPriority = 'high' | 'medium' | 'low' | string;
 
 /** Server-backed default model selection for each provider, used by chat and settings. */
 export type DefaultModelMap = Partial<Record<LLMProvider, string>>;
+
+/** Running agent summary shared by the chat composer and its status banner. */
+export type RunningBackgroundAgent = {
+  toolId: string;
+  /** `subagent_type`, e.g. `general-purpose` or `Explore`. */
+  agentType: string;
+  description: string;
+  /** When the agent was spawned, used for the elapsed-time readout. */
+  startedAt: Date;
+  toolCount: number;
+};

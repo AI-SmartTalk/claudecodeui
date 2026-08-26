@@ -1,3 +1,4 @@
+import { getRunningBackgroundAgents } from '@/shared/utils';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDownIcon } from 'lucide-react';
@@ -385,6 +386,11 @@ function ChatInterface({
     }
   }, [currentSessionId, provider, selectProviderEffort, selectedSession?.id]);
 
+  const runningBackgroundAgents = useMemo(
+    () => getRunningBackgroundAgents(chatMessages),
+    [chatMessages],
+  );
+
   // Mirrors ChatComposer's own visibility check so the message pane can
   // reserve enough bottom space to keep the floating status tab from
   // overlapping the last message.
@@ -488,6 +494,7 @@ function ChatInterface({
           )}
 
           <ChatComposer
+          runningBackgroundAgents={runningBackgroundAgents}
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}

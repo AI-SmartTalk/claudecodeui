@@ -1,3 +1,5 @@
+import BackgroundAgentsBanner from '@/modules/chat/composer/BackgroundAgentsBanner';
+import type { RunningBackgroundAgent } from '@/shared/types';
 import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
@@ -43,6 +45,7 @@ type MentionableFile = {
 };
 
 type ChatComposerProps = {
+  runningBackgroundAgents: RunningBackgroundAgent[];
   pendingPermissionRequests: PendingPermissionRequest[];
   handlePermissionDecision: (
     requestIds: string | string[],
@@ -121,6 +124,7 @@ type ChatComposerProps = {
  * model/permission popovers that drive the next turn.
  */
 export default function ChatComposer({
+  runningBackgroundAgents,
   pendingPermissionRequests,
   handlePermissionDecision,
   handleGrantToolPermission,
@@ -273,6 +277,12 @@ export default function ChatComposer({
       {!hasPendingPermissions && (
         <div className="pointer-events-none absolute bottom-full left-1/2 z-10 w-[calc(100%-1rem)] max-w-[54.25rem] -translate-x-1/2 translate-y-px bg-transparent sm:w-[calc(100%-2rem)]">
           <ActivityIndicator activity={activity} onAbort={onAbortSession} isInputFocused={isInputFocused} />
+        </div>
+      )}
+
+      {runningBackgroundAgents.length > 0 && (
+        <div className="mx-auto mb-2 max-w-[54.25rem]">
+          <BackgroundAgentsBanner agents={runningBackgroundAgents} />
         </div>
       )}
 

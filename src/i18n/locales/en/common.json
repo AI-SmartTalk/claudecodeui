@@ -23,6 +23,7 @@
     "files": "Files",
     "git": "Source Control",
     "tasks": "Tasks",
+    "docker": "Docker",
     "browser": "Browser",
     "computer": "Computer"
   },

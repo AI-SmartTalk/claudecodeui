@@ -1,0 +1,23 @@
+# Local, OpenAI-compatible Whisper (speech-to-text) for CloudCLI voice mode.
+# faster-whisper-server exposes POST /v1/audio/transcriptions, which the app's
+# /api/voice proxy forwards to. Enable it from Settings → Voice → "Local Whisper".
+#
+# Host port defaults to 8071 (override with WHISPER_PORT). Model defaults to
+# "small" — a good speed/accuracy balance on CPU, incl. French.
+services:
+  whisper:
+    image: fedirz/faster-whisper-server:latest-cpu
+    container_name: cloudcli-whisper
+    ports:
+      - "${WHISPER_PORT:-8071}:8000"
+    environment:
+      - WHISPER__MODEL=Systran/faster-whisper-small
+      - WHISPER__INFERENCE_DEVICE=cpu
+      # Keep the model loaded so repeated dictation stays fast.
+      - WHISPER__TTL=-1
+    volumes:
+      - whisper-cache:/root/.cache/huggingface
+    restart: unless-stopped
+
+volumes:
+  whisper-cache:

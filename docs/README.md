@@ -19,6 +19,29 @@
 
 ---
 
+> ℹ️ **This is a fork maintained by [AI SmartTalk](https://github.com/AI-SmartTalk), adapted to our needs.**
+> It tracks upstream [`siteboon/claudecodeui`](https://github.com/siteboon/claudecodeui) and adds features on top:
+> - **Preview tab** — proxy a project's local dev server (`localhost:<port>`) through CloudCLI so it's reachable from your phone. The port list is scoped to the current project (its running compose services and dev servers started from the project folder).
+> - **Docker tab** — reads the project's `docker-compose`, lists services with live state, images and published ports (clickable to preview), with per-service start/stop/restart/logs and global up/down.
+>
+> See [Local development](#local-development-ai-smarttalk-fork) to run it. To pull upstream updates: `git fetch upstream && git rebase upstream/main`.
+
+## Local development (AI SmartTalk fork)
+
+A helper script runs the full dev stack (API server + Vite client) in the background:
+
+```bash
+./local.sh start      # install deps if needed, start, and wait until ready
+./local.sh status     # show URLs and PID
+./local.sh logs       # tail the dev logs
+./local.sh restart
+./local.sh stop
+```
+
+- UI (dev): `http://localhost:5173` — API: `http://localhost:<SERVER_PORT>` (set in `.env`, default `3001`; bump it if the port is taken).
+- On first run the script creates `.env` from `.env.example` and installs dependencies.
+- **Remote / mobile access:** put your machine on a private network (e.g. [Tailscale](https://tailscale.com)) and open the same URLs from your phone — no public exposure needed. For a single-port setup, build and serve instead: `npm run build && npm run server`.
+
 ## Screenshots
 
 <div align="center">

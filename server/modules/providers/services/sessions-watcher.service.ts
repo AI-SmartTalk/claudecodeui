@@ -76,6 +76,34 @@ function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
   return filePath.endsWith('.jsonl');
 }
 
+/**
+ * Maps a Claude subagent transcript back to the session that spawned it.
+ *
+ * Claude writes these to `<project>/<session-id>/subagents/agent-<id>.jsonl`.
+ * The synchronizer deliberately refuses to index them as sessions (they repeat
+ * the parent's sessionId and would clobber its row), so they produce no event
+ * of their own. Without this the frontend is never told that a background agent
+ * progressed — and a parent idling on that very agent writes nothing either, so
+ * its running state would sit frozen until the user acted.
+ */
+function parentSessionIdForSubagentTranscript(
+  provider: LLMProvider,
+  filePath: string,
+): string | null {
+  if (provider !== 'claude') {
+    return null;
+  }
+
+  const segments = path.normalize(filePath).split(path.sep);
+  const subagentsIndex = segments.lastIndexOf('subagents');
+  // Must be `<session-id>/subagents/<file>`: anything else is not a transcript.
+  if (subagentsIndex < 1 || subagentsIndex !== segments.length - 2) {
+    return null;
+  }
+
+  return segments[subagentsIndex - 1] || null;
+}
+
 function clearPendingWatcherFlushTimer(): void {
   if (pendingWatcherFlushTimer) {
     clearTimeout(pendingWatcherFlushTimer);
@@ -229,6 +257,12 @@ async function onUpdate(
   provider: LLMProvider
 ): Promise<void> {
   if (!isWatcherTargetFile(provider, filePath)) {
+    return;
+  }
+
+  const parentSessionId = parentSessionIdForSubagentTranscript(provider, filePath);
+  if (parentSessionId) {
+    queuePendingWatcherUpdate(eventType, provider, parentSessionId);
     return;
   }
 

@@ -93,6 +93,12 @@ export interface NormalizedMessage {
   actualSessionId?: string;
   parentToolUseId?: string;
   subagentTools?: unknown[];
+  /**
+   * Whether a subagent has returned, derived server-side from its transcript.
+   * Undefined for live runs with no transcript yet, where the tool result's
+   * presence is the only available signal.
+   */
+  subagentComplete?: boolean;
   isFinal?: boolean;
   // Cursor-specific ordering
   sequence?: number;

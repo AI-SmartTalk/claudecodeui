@@ -15,6 +15,7 @@ type ClaudeToolResult = {
   content: unknown;
   isError: boolean;
   subagentTools?: unknown;
+  subagentComplete?: boolean;
   toolUseResult?: unknown;
 };
 
@@ -36,8 +37,37 @@ type ClaudeHistoryMessagesResult =
     limit?: number | null;
   };
 
-async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
+/**
+ * Detects the marker Claude Code writes when a run is aborted. An interrupted
+ * agent never writes its final text turn, so without this it would look like it
+ * is still working forever.
+ */
+function isInterruptionEntry(content: unknown): boolean {
+  const texts = typeof content === 'string'
+    ? [content]
+    : Array.isArray(content)
+      ? content.map((part) => (part as AnyRecord)?.text).filter((text): text is string => typeof text === 'string')
+      : [];
+
+  return texts.some((text) => text.includes('[Request interrupted'));
+}
+
+type AgentTranscript = {
+  tools: AnyRecord[];
+  /**
+   * Whether the subagent has returned. An async agent's `tool_use` result lands
+   * in the parent transcript the moment it is *launched* ("async_launched"), so
+   * the parent says nothing about progress — only the agent's own transcript
+   * does. The agent loop ends on an assistant turn that is pure text (its return
+   * value); any turn carrying a `tool_use`, or a trailing tool result, means it
+   * is still working.
+   */
+  isComplete: boolean;
+};
+
+async function parseAgentTools(filePath: string): Promise<AgentTranscript> {
   const tools: AnyRecord[] = [];
+  let isComplete = false;
 
   try {
     const fileStream = fs.createReadStream(filePath);
@@ -55,7 +85,8 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
         const entry = JSON.parse(line) as AnyRecord;
 
         if (entry.message?.role === 'assistant' && Array.isArray(entry.message?.content)) {
-          for (const part of entry.message.content as AnyRecord[]) {
+          const parts = entry.message.content as AnyRecord[];
+          for (const part of parts) {
             if (part.type === 'tool_use') {
               tools.push({
                 toolId: part.id,
@@ -65,6 +96,15 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
               });
             }
           }
+
+          // Entries without a message role (metadata lines) must not reset this,
+          // so only assistant/user turns move the flag.
+          isComplete = parts.some((part) => part.type === 'text')
+            && !parts.some((part) => part.type === 'tool_use');
+        } else if (entry.message?.role === 'user') {
+          // A tool result or a follow-up prompt means the agent has more to do;
+          // an abort is terminal even though no final text was ever written.
+          isComplete = isInterruptionEntry(entry.message.content);
         }
 
         if (entry.message?.role === 'user' && Array.isArray(entry.message?.content)) {
@@ -99,7 +139,7 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
     console.warn(`Error parsing agent file ${filePath}:`, message);
   }
 
-  return tools;
+  return { tools, isComplete };
 }
 
 async function getSessionMessages(
@@ -147,7 +187,7 @@ async function getSessionMessages(
     }
 
     const messages: AnyRecord[] = [];
-    const agentToolsCache = new Map<string, AnyRecord[]>();
+    const agentToolsCache = new Map<string, AgentTranscript>();
 
     const fileStream = fs.createReadStream(jsonLPath);
     const rl = readline.createInterface({
@@ -184,8 +224,7 @@ async function getSessionMessages(
         continue;
       }
 
-      const tools = await parseAgentTools(agentFilePath);
-      agentToolsCache.set(agentId, tools);
+      agentToolsCache.set(agentId, await parseAgentTools(agentFilePath));
     }
 
     for (const message of messages) {
@@ -194,10 +233,15 @@ async function getSessionMessages(
         continue;
       }
 
-      const agentTools = agentToolsCache.get(String(agentId));
-      if (agentTools && agentTools.length > 0) {
-        message.subagentTools = agentTools;
+      const transcript = agentToolsCache.get(String(agentId));
+      if (!transcript) {
+        continue;
       }
+
+      if (transcript.tools.length > 0) {
+        message.subagentTools = transcript.tools;
+      }
+      message.subagentComplete = transcript.isComplete;
     }
 
     const sortedMessages = messages.sort(
@@ -657,6 +701,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               content: part.content,
               isError: Boolean(part.is_error),
               subagentTools: raw.subagentTools,
+              subagentComplete: raw.subagentComplete as boolean | undefined,
               toolUseResult: raw.toolUseResult,
             });
           }
@@ -684,6 +729,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           toolUseResult: toolResult.toolUseResult,
         };
         msg.subagentTools = toolResult.subagentTools;
+        msg.subagentComplete = toolResult.subagentComplete;
       }
     }
 

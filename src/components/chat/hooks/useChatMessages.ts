@@ -222,7 +222,10 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             ? {
                 childTools,
                 currentToolIndex: childTools.length > 0 ? childTools.length - 1 : -1,
-                isComplete: Boolean(toolResult),
+                // A background agent's result is only a launch ack, so it lands
+                // before any work is done. Trust the transcript-derived state
+                // when the provider could compute one.
+                isComplete: msg.subagentComplete ?? Boolean(toolResult),
               }
             : undefined,
           ...sharedMetadata,

@@ -17,6 +17,7 @@ import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
 import type { QueuedDraft } from '../../hooks/useChatComposerState';
 import type { SessionActivity } from '../../../../hooks/useSessionProtection';
 import type { PendingPermissionRequest, PermissionMode } from '../../types/types';
+import type { RunningBackgroundAgent } from '../../utils/backgroundAgents';
 import type { ProviderModelOption } from '../../../../types/app';
 import {
   PromptInput,
@@ -34,6 +35,7 @@ import ActivityIndicator from './ActivityIndicator';
 import ComposerAttachment from './ComposerAttachment';
 import VoiceInputButton from './VoiceInputButton';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
+import BackgroundAgentsBanner from './BackgroundAgentsBanner';
 import TokenUsageSummary from './TokenUsageSummary';
 import QueuedMessageCard from './QueuedMessageCard';
 import ComposerModelMenu from './ComposerModelMenu';
@@ -55,6 +57,7 @@ interface SlashCommand {
 }
 
 interface ChatComposerProps {
+  runningBackgroundAgents: RunningBackgroundAgent[];
   pendingPermissionRequests: PendingPermissionRequest[];
   handlePermissionDecision: (
     requestIds: string | string[],
@@ -122,6 +125,7 @@ interface ChatComposerProps {
 }
 
 export default function ChatComposer({
+  runningBackgroundAgents,
   pendingPermissionRequests,
   handlePermissionDecision,
   handleGrantToolPermission,
@@ -270,6 +274,12 @@ export default function ChatComposer({
       {!hasPendingPermissions && (
         <div className="pointer-events-none absolute bottom-full left-1/2 z-10 w-[calc(100%-1rem)] max-w-[54.25rem] -translate-x-1/2 translate-y-px bg-transparent sm:w-[calc(100%-2rem)]">
           <ActivityIndicator activity={activity} onAbort={onAbortSession} isInputFocused={isInputFocused} />
+        </div>
+      )}
+
+      {runningBackgroundAgents.length > 0 && (
+        <div className="mx-auto mb-2 max-w-[54.25rem]">
+          <BackgroundAgentsBanner agents={runningBackgroundAgents} />
         </div>
       )}
 

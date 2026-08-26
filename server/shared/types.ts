@@ -275,6 +275,11 @@ export type NormalizedMessage = {
   summary?: string;
   tokenBudget?: unknown;
   subagentTools?: unknown;
+  /**
+   * Whether a subagent has returned. Undefined when no transcript backs the
+   * call (a live run), so consumers fall back to the tool result's presence.
+   */
+  subagentComplete?: boolean;
   toolUseResult?: unknown;
   sequence?: number;
   rowid?: number;

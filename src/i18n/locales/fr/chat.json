@@ -217,5 +217,11 @@
   },
   "tasks": {
     "nextTaskPrompt": "Commencer la prochaine tâche"
+  },
+  "backgroundAgents": {
+    "title_one": "{{count}} agent en arrière-plan",
+    "title_other": "{{count}} agents en arrière-plan",
+    "tools_one": "{{count}} outil",
+    "tools_other": "{{count}} outils"
   }
 }

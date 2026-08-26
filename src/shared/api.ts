@@ -553,7 +553,17 @@ export const api = {
     installRuntime: () => post('/api/browser-use/runtime/install'),
   },
 
+  docker: {
+    services: (projectPath: string) => get(`/api/docker/services?projectPath=${encodeURIComponent(projectPath)}`),
+    run: (input: { action: string; projectPath: string; service?: string }) => post('/api/docker', input),
+  },
+
   voice: {
+    localWhisper: {
+      status: () => get('/api/voice/local-whisper/status'),
+      enable: () => post('/api/voice/local-whisper/enable'),
+      disable: () => post('/api/voice/local-whisper/disable'),
+    },
     health: () => get('/api/voice/health'),
     transcribe: (formData: FormData, headers: Record<string, string> = {}) =>
       authenticatedFetch('/api/voice/transcribe', {

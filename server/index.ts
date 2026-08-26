@@ -41,7 +41,8 @@ import {
     stopAllPlugins,
 } from './modules/plugins/index.js';
 import providerRoutes from './modules/providers/provider.routes.js';
-import { voiceRoutes } from './modules/voice/index.js';
+import { localWhisperRoutes, voiceRoutes } from './modules/voice/index.js';
+import { dockerRoutes } from './modules/docker/index.js';
 import {
     closeScheduledMessageDispatcher,
     initializeScheduledMessageDispatcher,
@@ -197,7 +198,13 @@ app.use('/api/scheduled-messages', authenticateToken, scheduledMessagesRoutes);
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
 
+// Local Whisper (Docker) management — mount before /api/voice so the more
+// specific prefix wins.
+app.use('/api/voice/local-whisper', authenticateToken, localWhisperRoutes);
 app.use('/api/voice', authenticateToken, voiceRoutes);
+
+// Docker API: list a project's compose services and run whitelisted actions.
+app.use('/api/docker', authenticateToken, dockerRoutes);
 
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(APP_ROOT, 'public')));

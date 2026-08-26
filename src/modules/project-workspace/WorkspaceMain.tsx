@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, type Dispatch, type SetStateAction } fro
 import { ChatInterface } from '@/modules/chat';
 import { FileTree } from '@/modules/file-tree';
 import { StandaloneShell } from '@/modules/standalone-shell';
+import { DockerPanel } from '@/modules/docker';
 import { GitPanel } from '@/modules/git-panel';
 import { PluginTabContent } from '@/modules/plugins';
 import { BrowserUsePanel, useBrowserUseEnabled } from '@/modules/browser-use';
@@ -198,6 +199,12 @@ function WorkspaceMain({
           {shouldShowBrowserTab && activeTab === 'browser' && (
             <div className="h-full overflow-hidden">
               <BrowserUsePanel isVisible={activeTab === 'browser'} onShowSettings={onShowSettings} />
+            </div>
+          )}
+
+          {activeTab === 'docker' && (
+            <div className="h-full overflow-hidden">
+              <DockerPanel selectedProject={selectedProject} isVisible={activeTab === 'docker'} />
             </div>
           )}
 

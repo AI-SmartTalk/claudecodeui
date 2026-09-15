@@ -64,10 +64,10 @@ type ClaudeSubagentTranscript = {
   activity: SubagentActivity[];
   model?: string;
   /**
-   * True when the transcript's last tool call never received a result, which
-   * is the only evidence in the file that the agent stopped mid-flight.
+   * True until the agent emits its final text reply or an interruption marker.
+   * A tool result alone does not mean the agent has finished.
    */
-  endedMidToolCall: boolean;
+  awaitingReturn: boolean;
 };
 
 /**
@@ -79,7 +79,7 @@ type ClaudeSubagentTranscript = {
  */
 async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSubagentTranscript> {
   const activity: SubagentActivity[] = [];
-  const transcript: ClaudeSubagentTranscript = { activity, endedMidToolCall: false };
+  const transcript: ClaudeSubagentTranscript = { activity, awaitingReturn: true };
   const toolsById = new Map<string, SubagentActivity>();
 
   try {
@@ -97,6 +97,19 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
       try {
         const entry = JSON.parse(line) as AnyRecord;
         const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : undefined;
+
+        // Only conversation turns affect completion; metadata must not reset it.
+        const content = entry.message?.content;
+        const parts = Array.isArray(content) ? content as AnyRecord[] : [];
+        if (entry.message?.role === 'assistant') {
+          transcript.awaitingReturn = !(typeof content === 'string' && content.trim())
+            && !(parts.some((part) => part.type === 'text')
+              && !parts.some((part) => part.type === 'tool_use'));
+        } else if (entry.message?.role === 'user') {
+          const texts = typeof content === 'string' ? [content] : parts.map((part) => part.text);
+          transcript.awaitingReturn = !texts.some((text) => typeof text === 'string' && text.includes('[Request interrupted'));
+        }
+
 
         if (entry.message?.role === 'assistant' && Array.isArray(entry.message?.content)) {
           if (typeof entry.message.model === 'string') {
@@ -159,9 +172,6 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`Error parsing agent file ${filePath}:`, message);
   }
-
-  const lastActivity = activity[activity.length - 1];
-  transcript.endedMidToolCall = lastActivity?.kind === 'tool' && !lastActivity.toolResult;
 
   return transcript;
 }
@@ -439,7 +449,7 @@ async function getSessionMessages(
     const subagentsById = new Map<string, {
       activity: SubagentActivity[];
       info: SubagentInfo;
-      endedMidToolCall: boolean;
+      awaitingReturn: boolean;
     }>();
     for (const agentId of agentIds) {
       const located = await findClaudeSubagentTranscript(projectDir, providerSessionId, agentId);
@@ -453,7 +463,7 @@ async function getSessionMessages(
       ]);
 
       subagentsById.set(agentId, {
-        endedMidToolCall: transcript.endedMidToolCall,
+        awaitingReturn: transcript.awaitingReturn,
         activity: transcript.activity
           .slice(0, MAX_TRANSMITTED_SUBAGENT_ACTIVITIES)
           .map(truncateSubagentActivity),
@@ -489,10 +499,10 @@ async function getSessionMessages(
       // An async agent's launch row never tells you it finished — only the
       // later notification does. When that notification is missing (a live run,
       // or one compacted out of the transcript), the agent's own transcript is
-      // the evidence: a timeline that does not stop mid-tool-call is done.
+      // the evidence: a final reply or interruption marks the agent as done.
       const isAwaitingAsyncAgent = message.toolUseResult?.isAsync === true
         && !notification
-        && (!subagent || subagent.endedMidToolCall);
+        && (!subagent || subagent.awaitingReturn);
 
       if (subagent) {
         if (subagent.activity.length > 0) {

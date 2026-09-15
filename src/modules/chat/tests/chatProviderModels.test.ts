@@ -19,6 +19,8 @@ const okJson = (data: unknown) => Promise.resolve({
 });
 
 vi.mock('@/shared/api', () => ({
+  fetchDefaultModels: async () => ({}),
+  saveDefaultModel: async (provider: string, model: string) => ({ [provider]: model }),
   api: {
     // The preference store PATCHes through api.user; it is stubbed rather than
     // exercised here, which keeps these tests about the model record.

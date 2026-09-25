@@ -447,6 +447,56 @@ test('Claude history keeps a background agent running until its outcome is repor
   }
 });
 
+test('Claude history lists a still-running background agent even outside the requested page', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-running-agents-'));
+
+  try {
+    const parentPath = await writeClaudeSubagentSession(tempRoot);
+    await dropTaskNotification(parentPath);
+    // The conversation carries on after the launch, pushing it off the latest page.
+    const laterTurns = ['Still on it.', 'Working through the next step.'].map((text, index) => JSON.stringify({
+      sessionId: SESSION_ID,
+      type: 'assistant',
+      uuid: `later-${index}`,
+      timestamp: `2026-08-21T10:0${index + 2}:00.000Z`,
+      message: { role: 'assistant', content: [{ type: 'text', text }] },
+    }));
+    await writeFile(parentPath, `${await readFile(parentPath, 'utf8')}${laterTurns.join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
+
+      // A page this small leaves the launch row out. Clients that only hold a
+      // page — the iOS app — still need to know the agent is working.
+      const liveRunStartedAt = Date.parse('2026-08-21T09:59:00.000Z');
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => liveRunStartedAt }).fetchHistory(SESSION_ID, {
+        providerSessionId: SESSION_ID,
+        limit: 1,
+      });
+
+      assert.ok(!history.messages.some((message) => message.toolId === AGENT_TOOL_USE_ID), 'the launch is outside the page');
+      assert.deepEqual(history.runningBackgroundAgents, [{
+        toolId: AGENT_TOOL_USE_ID,
+        agentType: 'Explore',
+        description: 'Survey the repo',
+        startedAt: '2026-08-21T10:00:00.000Z',
+        toolCount: 1,
+      }]);
+
+      // Once the process is gone the agent can never report, so it is no
+      // longer listed.
+      const afterExit = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(SESSION_ID, {
+        providerSessionId: SESSION_ID,
+        limit: 1,
+      });
+      assert.deepEqual(afterExit.runningBackgroundAgents, []);
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('Claude history reports a background agent stopped once its session process is gone', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-stopped-agent-'));
 

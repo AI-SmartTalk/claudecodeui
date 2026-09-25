@@ -647,6 +647,28 @@ export type FetchHistoryResult = {
   offset: number;
   limit: number | null;
   tokenUsage?: unknown;
+  /**
+   * Background agents still working, read across the whole transcript. The
+   * composer banner cannot derive this from the page it holds: a long turn
+   * pushes the call that launched an agent out of the latest page.
+   */
+  runningBackgroundAgents?: RunningBackgroundAgent[];
+};
+
+/**
+ * One background agent that has not reported back yet, as the composer banner
+ * lists it. Produced by provider history readers that can tell (Claude).
+ */
+export type RunningBackgroundAgent = {
+  /** Tool-call id of the Agent/Task call that launched it. */
+  toolId: string;
+  /** `subagent_type`, e.g. `general-purpose` or `Explore`. */
+  agentType: string;
+  description: string;
+  /** ISO time the agent was launched, for the elapsed-time readout. */
+  startedAt: string;
+  /** Tool calls the agent has made so far. */
+  toolCount: number;
 };
 
 // ---------------------------

@@ -10,6 +10,7 @@ import type {
   FetchHistoryOptions,
   FetchHistoryResult,
   NormalizedMessage,
+  RunningBackgroundAgent,
   SubagentActivity,
   SubagentInfo,
   TaskUsage,
@@ -563,6 +564,35 @@ function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
 
 /** When the CLI run behind a session started (epoch ms), or null when none is up. */
 type LiveRunStartTimeProbe = (sessionId: string) => number | null;
+
+function readAgentInputString(input: AnyRecord | null, key: string): string | null {
+  const value = input?.[key];
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+/**
+ * Lists the agents whose launching call is marked as still running, across
+ * the whole normalized transcript.
+ */
+function collectRunningBackgroundAgents(messages: NormalizedMessage[]): RunningBackgroundAgent[] {
+  const running: RunningBackgroundAgent[] = [];
+  for (const message of messages) {
+    if (message.kind !== 'tool_use' || !message.toolId || message.subagent?.status !== 'running') {
+      continue;
+    }
+
+    const input = readObjectRecord(message.toolInput);
+    const activity = Array.isArray(message.subagentTools) ? message.subagentTools : [];
+    running.push({
+      toolId: message.toolId,
+      agentType: readAgentInputString(input, 'subagent_type') ?? message.subagent.type ?? 'Agent',
+      description: readAgentInputString(input, 'description') ?? message.subagent.description ?? 'Running task',
+      startedAt: typeof message.timestamp === 'string' ? message.timestamp : new Date().toISOString(),
+      toolCount: activity.filter((entry: SubagentActivity) => entry.kind === 'tool').length,
+    });
+  }
+  return running;
+}
 
 async function getSessionMessages(
   sessionId: string,
@@ -1646,6 +1676,10 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       }
     }
 
+    // Read before paging: the call that launched an agent is often older than
+    // the page the client holds, and the banner must still list the agent.
+    const runningBackgroundAgents = collectRunningBackgroundAgents(normalized);
+
     // Everything the transcript draws, and nothing else — so a page of N rows
     // is N rows the user sees, and `total` counts the same thing.
     const transcript = prepareTranscriptMessages(normalized);
@@ -1664,6 +1698,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       // composer's counter tracks the conversation instead of being frozen at
       // whatever it was when the session was opened.
       tokenUsage: summarizeClaudeTokenUsage(rawMessages),
+      runningBackgroundAgents,
     };
   }
 }

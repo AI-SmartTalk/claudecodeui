@@ -401,6 +401,10 @@ export function useChatSessionState({
   }, [activeSessionId, pendingUserMessage, sessionStore]);
 
   const storeMessages = activeSessionId ? sessionStore.getMessages(activeSessionId) : NO_MESSAGES;
+  // Read at render like the messages: the store re-renders on every slot change.
+  const historyRunningBackgroundAgents = activeSessionId
+    ? sessionStore.getSessionSlot(activeSessionId)?.runningBackgroundAgents
+    : undefined;
 
   const chatMessages = useMemo(() => {
     const all = normalizedToChatMessages(storeMessages);
@@ -1114,6 +1118,7 @@ export function useChatSessionState({
     setIsUserScrolledUp,
     tokenBudget,
     setTokenBudget,
+    historyRunningBackgroundAgents,
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,

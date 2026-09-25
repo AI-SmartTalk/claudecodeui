@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
+import type { FetchHistoryResult } from '@/shared/types.js';
 
 const SESSION_ID = 'session-under-test';
 const AGENT_ID = 'a1b2c3d4e5f60718';
@@ -81,11 +82,12 @@ const agentInterruption = jsonl([{
 
 /**
  * Runs `fetchHistory` against a throwaway ~/.claude tree holding one parent
- * session plus the given subagent transcript, and returns the Agent row.
+ * session plus the given subagent transcript, and hands over the result.
  */
-async function withSubagentTranscript(
+async function withClaudeHistory(
   agentTranscript: string,
-  assertRow: (row: Record<string, unknown>) => void,
+  inspect: (history: FetchHistoryResult) => void,
+  { laterParentTurns = [], limit = null }: { laterParentTurns?: unknown[]; limit?: number | null } = {},
 ): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
   const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'claude-subagent-'));
@@ -100,7 +102,8 @@ async function withSubagentTranscript(
     await mkdir(path.join(projectDir, SESSION_ID, 'subagents'), { recursive: true });
 
     const sessionPath = path.join(projectDir, `${SESSION_ID}.jsonl`);
-    await writeFile(sessionPath, parentTranscript(), 'utf8');
+    const parentRows = [parentTranscript(), jsonl(laterParentTurns)].filter(Boolean).join('\n');
+    await writeFile(sessionPath, parentRows, 'utf8');
     await writeFile(
       path.join(projectDir, SESSION_ID, 'subagents', `agent-${AGENT_ID}.jsonl`),
       agentTranscript,
@@ -109,10 +112,7 @@ async function withSubagentTranscript(
 
     sessionsDb.createSession(SESSION_ID, 'claude', PROJECT_PATH, undefined, undefined, undefined, sessionPath);
 
-    const { messages } = await new ClaudeSessionsProvider().fetchHistory(SESSION_ID);
-    const row = messages.find((message) => message.kind === 'tool_use' && message.toolName === 'Agent');
-    assert.ok(row, 'expected an Agent tool_use row in the normalized history');
-    assertRow(row as Record<string, unknown>);
+    inspect(await new ClaudeSessionsProvider().fetchHistory(SESSION_ID, { limit }));
   } finally {
     closeConnection();
     restoreHomeDir();
@@ -123,6 +123,18 @@ async function withSubagentTranscript(
     }
     await rm(tempDirectory, { recursive: true, force: true });
   }
+}
+
+/** Runs `fetchHistory` like withClaudeHistory and returns the Agent row. */
+async function withSubagentTranscript(
+  agentTranscript: string,
+  assertRow: (row: Record<string, unknown>) => void,
+): Promise<void> {
+  await withClaudeHistory(agentTranscript, ({ messages }) => {
+    const row = messages.find((message) => message.kind === 'tool_use' && message.toolName === 'Agent');
+    assert.ok(row, 'expected an Agent tool_use row in the normalized history');
+    assertRow(row as Record<string, unknown>);
+  });
 }
 
 test('an async agent still working reports as incomplete despite its launch ack', async () => {
@@ -143,5 +155,39 @@ test('an async agent that returned its report reports as complete', async () => 
 test('an interrupted agent reports as complete rather than running forever', async () => {
   await withSubagentTranscript(`${agentToolTurn}\n${agentInterruption}`, (row) => {
     assert.equal((row.subagent as { status: string }).status, 'completed');
+  });
+});
+
+test('the history lists an agent still working', async () => {
+  await withClaudeHistory(agentToolTurn, ({ runningBackgroundAgents }) => {
+    assert.deepEqual(runningBackgroundAgents, [{
+      toolId: TOOL_USE_ID,
+      agentType: 'general-purpose',
+      description: 'Do the thing',
+      startedAt: '2026-07-22T10:00:00.000Z',
+      toolCount: 1,
+    }]);
+  });
+});
+
+test('an agent launched before the requested page is still listed as running', async () => {
+  // A long turn pushes the launching call out of the latest page; the composer
+  // banner only sees that page, so the history has to name the agent itself.
+  const laterParentTurns = Array.from({ length: 5 }, (_, index) => ({
+    sessionId: SESSION_ID,
+    type: 'assistant',
+    timestamp: `2026-07-22T10:01:0${index}.000Z`,
+    message: { role: 'assistant', content: [{ type: 'text', text: `Progress note ${index}` }] },
+  }));
+
+  await withClaudeHistory(agentToolTurn, ({ messages, runningBackgroundAgents }) => {
+    assert.ok(!messages.some((message) => message.toolName === 'Agent'), 'the launch is outside the page');
+    assert.deepEqual(runningBackgroundAgents?.map((agent) => agent.toolId), [TOOL_USE_ID]);
+  }, { laterParentTurns, limit: 2 });
+});
+
+test('an agent that returned its report is not listed as running', async () => {
+  await withClaudeHistory(`${agentToolTurn}\n${agentFinalTurn}`, ({ runningBackgroundAgents }) => {
+    assert.deepEqual(runningBackgroundAgents, []);
   });
 });

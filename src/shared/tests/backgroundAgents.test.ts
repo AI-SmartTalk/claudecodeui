@@ -53,3 +53,32 @@ test('elapsed time is formatted like the CLI status line', () => {
   // A clock skew must not render a negative duration.
   assert.equal(formatElapsed(base, base - 5_000), '0s');
 });
+
+test('agents launched before the loaded page come from the history list', () => {
+  const running = getRunningBackgroundAgents(
+    [subagentMessage('loaded and finished', true, 2)],
+    [
+      {
+        toolId: 'tool-older launch',
+        agentType: 'general-purpose',
+        description: 'older launch',
+        startedAt: '2026-07-22T09:00:00.000Z',
+        toolCount: 7,
+      },
+      // The loaded messages know this one finished; the history list is older.
+      {
+        toolId: 'tool-loaded and finished',
+        agentType: 'general-purpose',
+        description: 'loaded and finished',
+        startedAt: '2026-07-22T10:00:00.000Z',
+        toolCount: 1,
+      },
+    ],
+  );
+
+  assert.deepEqual(
+    running.map((agent) => ({ description: agent.description, toolCount: agent.toolCount })),
+    [{ description: 'older launch', toolCount: 7 }],
+  );
+  assert.ok(running[0].startedAt instanceof Date);
+});

@@ -140,6 +140,7 @@ function ChatInterface({
     isUserScrolledUp,
     setIsUserScrolledUp,
     tokenBudget,
+    historyRunningBackgroundAgents,
     setTokenBudget,
     visibleMessageCount,
     visibleMessages,
@@ -387,8 +388,8 @@ function ChatInterface({
   }, [currentSessionId, provider, selectProviderEffort, selectedSession?.id]);
 
   const runningBackgroundAgents = useMemo(
-    () => getRunningBackgroundAgents(chatMessages),
-    [chatMessages],
+    () => getRunningBackgroundAgents(chatMessages, historyRunningBackgroundAgents),
+    [chatMessages, historyRunningBackgroundAgents],
   );
 
   // Mirrors ChatComposer's own visibility check so the message pane can

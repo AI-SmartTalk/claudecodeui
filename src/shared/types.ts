@@ -1578,3 +1578,13 @@ export type RunningBackgroundAgent = {
   startedAt: Date;
   toolCount: number;
 };
+
+/**
+ * A still-running agent as the session history endpoint reports it, read across
+ * the whole transcript. The chat keeps it per session so the banner can list
+ * agents launched before the loaded page.
+ */
+export type HistoryRunningBackgroundAgent = Omit<RunningBackgroundAgent, 'startedAt'> & {
+  /** ISO launch time. */
+  startedAt: string;
+};

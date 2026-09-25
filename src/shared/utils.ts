@@ -1,7 +1,15 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-import type { ChatMessage, RunningBackgroundAgent, DefaultModelMap, LLMProvider, Project, ProjectSession } from '@/shared/types';
+import type {
+  ChatMessage,
+  DefaultModelMap,
+  HistoryRunningBackgroundAgent,
+  LLMProvider,
+  Project,
+  ProjectSession,
+  RunningBackgroundAgent,
+} from '@/shared/types';
 
 //----------------- DEPLOYMENT MODE ------------
 
@@ -258,11 +266,24 @@ const readBackgroundAgentString = (value: unknown): string | null => (
   typeof value === 'string' && value.trim() ? value : null
 );
 
-/** Derives running agents from normalized lifecycle metadata for the composer. */
-export function getRunningBackgroundAgents(messages: ChatMessage[]): RunningBackgroundAgent[] {
+/**
+ * Lists the agents still working for the composer banner.
+ *
+ * Loaded messages are the freshest word on the agents they contain. The
+ * history's transcript-wide list covers agents launched before the loaded page,
+ * which a long turn pushes out of view.
+ */
+export function getRunningBackgroundAgents(
+  messages: ChatMessage[],
+  historyAgents: HistoryRunningBackgroundAgent[] = [],
+): RunningBackgroundAgent[] {
   const running: RunningBackgroundAgent[] = [];
+  const loadedAgentToolIds = new Set<string>();
 
   for (const message of messages) {
+    if (message.isSubagentContainer && message.toolId) {
+      loadedAgentToolIds.add(message.toolId);
+    }
     if (!message.isSubagentContainer || (message.subagent ? message.subagent.status !== 'running' : Boolean(message.toolResult))) {
       continue;
     }
@@ -275,6 +296,13 @@ export function getRunningBackgroundAgents(messages: ChatMessage[]): RunningBack
       startedAt: message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp ?? Date.now()),
       toolCount: message.subagentActivity?.filter((entry) => entry.kind === 'tool').length ?? 0,
     });
+  }
+
+  for (const agent of historyAgents) {
+    if (loadedAgentToolIds.has(agent.toolId)) {
+      continue;
+    }
+    running.push({ ...agent, startedAt: new Date(agent.startedAt) });
   }
 
   return running;

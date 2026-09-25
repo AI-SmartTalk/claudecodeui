@@ -10,7 +10,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { LLMProvider, NormalizedMessage } from '@/shared/types';
+import type { HistoryRunningBackgroundAgent, LLMProvider, NormalizedMessage } from '@/shared/types';
 import { removeOptimisticUserEchoes } from '@/modules/chat/utils/sessionMessageReconciliation';
 import {
   hasReachedCachedTailTimeBoundary,
@@ -47,6 +47,11 @@ export type SessionSlot = {
   hasMore: boolean;
   offset: number;
   tokenUsage: unknown;
+  /**
+   * Agents still running across the whole transcript, as of the last history
+   * read; `undefined` until a page reports it (only Claude does).
+   */
+  runningBackgroundAgents: HistoryRunningBackgroundAgent[] | undefined;
 };
 
 const EMPTY: NormalizedMessage[] = [];
@@ -71,6 +76,7 @@ function createEmptySlot(): SessionSlot {
     // history refresh overwrote the value fetched from the token-usage
     // endpoint with it.
     tokenUsage: undefined,
+    runningBackgroundAgents: undefined,
     _historyMutationQueue: Promise.resolve(),
   };
 }
@@ -80,6 +86,7 @@ type SessionHistoryPage = {
   total: number;
   hasMore: boolean;
   tokenUsage?: unknown;
+  runningBackgroundAgents?: HistoryRunningBackgroundAgent[];
 };
 
 function enqueueHistoryMutation<T>(
@@ -114,6 +121,11 @@ async function requestSessionHistoryPage(
     ...(
       data && typeof data === 'object' && 'tokenUsage' in data
         ? { tokenUsage: data.tokenUsage }
+        : {}
+    ),
+    ...(
+      Array.isArray(data?.runningBackgroundAgents)
+        ? { runningBackgroundAgents: data.runningBackgroundAgents as HistoryRunningBackgroundAgent[] }
         : {}
     ),
   };
@@ -520,6 +532,13 @@ async function refreshLatestSlotFromServer(
     slot.tokenUsage = latestPage.tokenUsage;
     changed = true;
   }
+  if (
+    latestPage.runningBackgroundAgents !== undefined
+    && JSON.stringify(latestPage.runningBackgroundAgents) !== JSON.stringify(slot.runningBackgroundAgents)
+  ) {
+    slot.runningBackgroundAgents = latestPage.runningBackgroundAgents;
+    changed = true;
+  }
 
   if (!nextServerMessages) {
     console.warn(`[SessionStore] Could not bridge latest history for ${sessionId}; retaining cached suffix.`);
@@ -616,6 +635,9 @@ export function useSessionStore() {
         if (data.tokenUsage !== undefined) {
           slot.tokenUsage = data.tokenUsage;
         }
+        if (data.runningBackgroundAgents !== undefined) {
+          slot.runningBackgroundAgents = data.runningBackgroundAgents;
+        }
 
         notify(sessionId);
         return slot;
@@ -685,6 +707,9 @@ export function useSessionStore() {
           prependedCount = olderMerge.prependedCount;
           if (data.tokenUsage !== undefined) {
             slot.tokenUsage = data.tokenUsage;
+          }
+          if (data.runningBackgroundAgents !== undefined) {
+            slot.runningBackgroundAgents = data.runningBackgroundAgents;
           }
           recomputeMergedIfNeeded(slot);
           changed = true;

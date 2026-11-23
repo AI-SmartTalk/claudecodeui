@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 
-import type { FileStatusCode, LLMProvider, McpProvider, McpScope, McpTransport, SettingsMainTab } from '@/shared/types';
+import type { FileStatusCode, KanbanColumnKey, LLMProvider, McpProvider, McpScope, McpTransport, SettingsMainTab } from '@/shared/types';
 import type { UserPreferenceKey } from '@/shared/userSettings';
 
 /** The four buckets the git changes view sorts working-tree files into. */
@@ -223,3 +223,19 @@ export const PROVIDER_PERMISSION_PREFERENCE_KEYS: Record<LLMProvider, UserPrefer
 
 /** Synchronizes default-model changes between chat and settings. */
 export const DEFAULT_MODELS_CHANGED_EVENT = 'cloudcli:default-models-changed';
+
+// ---------------------------
+
+//----------------- KANBAN BOARD ------------
+
+/** The columns of a project kanban board, in display order; mirrors the server's fixed column list. */
+export const KANBAN_COLUMN_ORDER: KanbanColumnKey[] = ['backlog', 'todo', 'in_progress', 'review', 'done'];
+
+/** English fallback label of each kanban column, used as the i18n defaultValue of `kanban.columns.<key>`. */
+export const KANBAN_COLUMN_LABELS: Record<KanbanColumnKey, string> = {
+  backlog: 'Backlog',
+  todo: 'To do',
+  in_progress: 'In progress',
+  review: 'To test',
+  done: 'Done',
+};

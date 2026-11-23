@@ -51,7 +51,7 @@ export type ProviderModelActions = {
 //----------------- PROJECTS AND SESSIONS ------------
 
 /** Identifies the workspace pane the user is looking at; plugin panes are namespaced by plugin id. */
-export type AppTab = 'chat' | 'files' | 'shell' | 'git' | 'tasks' | 'browser' | 'docker' | `plugin:${string}`;
+export type AppTab = 'chat' | 'files' | 'shell' | 'git' | 'tasks' | 'browser' | 'docker' | 'kanban' | `plugin:${string}`;
 
 /** A message queued to be sent to a session at a future time. */
 export type ScheduledMessage = {
@@ -1773,3 +1773,115 @@ type TaskPriority = 'high' | 'medium' | 'low' | string;
 
 /** Server-backed default model selection for each provider, used by chat and settings. */
 export type DefaultModelMap = Partial<Record<LLMProvider, string>>;
+
+// ---------------------------
+
+//----------------- KANBAN BOARD ------------
+
+/** One column of a project's kanban board, in the fixed order the server returns. */
+export type KanbanColumnKey = 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
+
+/** What a card knows of its agent: idle, waiting in the project queue, working, or failed on its last run. */
+export type KanbanAgentStatus = 'idle' | 'queued' | 'running' | 'failed';
+
+/** A conversation linked to a card; the newest existing one is the card's active conversation. */
+export type KanbanCardSession = {
+  sessionId: string;
+  title: string | null;
+  provider: string | null;
+  /** False once the conversation was deleted from the sidebar. */
+  exists: boolean;
+  linkedAt: string;
+};
+
+/** One entry of a card's thread, written by the user, by the agent (its final reply) or by the system (failures, stops). */
+export type KanbanComment = {
+  id: string;
+  author: 'user' | 'agent' | 'system';
+  body: string;
+  attachments: ChatAttachment[];
+  sessionId: string | null;
+  /** For user comments: whether a run has already carried it to the agent. */
+  delivered: boolean;
+  createdAt: string;
+};
+
+/** A card as the board lists it. `model: null` means the app's default model for `provider`. */
+export type KanbanCard = {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string;
+  column: KanbanColumnKey;
+  position: number;
+  provider: LLMProvider;
+  model: string | null;
+  attachments: ChatAttachment[];
+  agentStatus: KanbanAgentStatus;
+  agentError: string | null;
+  sessions: KanbanCardSession[];
+  activeSessionId: string | null;
+  commentCount: number;
+  /** The tracker ticket the card mirrors; null for a card created on the board. */
+  external: KanbanExternalTicketRef | null;
+  /** The agent's latest reply (excerpt on the board), shown as "what to test". */
+  latestAgentReply: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** The external tracker ticket a kanban card mirrors (key, link, status and display extras). */
+export type KanbanExternalTicketRef = {
+  source: string;
+  key: string | null;
+  url: string | null;
+  status: string | null;
+  priority: string | null;
+  type: string | null;
+  labels: string[];
+  assignee: string | null;
+};
+
+/** One step of what the agent is doing on a card, newest first in `KanbanActivity.steps`. */
+export type KanbanActivityStep = {
+  kind: 'tool' | 'text' | 'status';
+  label: string;
+  detail: string | null;
+  at: string | null;
+};
+
+/** The live view of a card's agent: whether its conversation is running and its latest steps. */
+export type KanbanActivity = {
+  running: boolean;
+  sessionId: string | null;
+  steps: KanbanActivityStep[];
+};
+
+/** The external tracker linked to a project board, as the server exposes it (never the token). */
+export type KanbanConnector = {
+  type: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  hasSecret: boolean;
+  lastSyncAt: string | null;
+  lastSyncError: string | null;
+  lastSyncCount: number | null;
+};
+
+/** A planning run: the agent turning a request into cards, listed on the board while it works. */
+export type KanbanPlan = {
+  sessionId: string;
+  prompt: string;
+  startedAt: string;
+  running: boolean;
+};
+
+/** A tracker status returned by a connection test, with the column it maps to under the tested settings. */
+export type KanbanTrackerStatus = {
+  name: string;
+  category: string;
+  column: KanbanColumnKey;
+};
+
+/** A card with its comment thread, as the card detail view loads it. */
+export type KanbanCardDetails = KanbanCard & { comments: KanbanComment[] };

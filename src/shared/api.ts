@@ -264,6 +264,54 @@ export const api = {
     cancel: (id: string) => del(`/api/scheduled-messages/${encodeURIComponent(id)}`),
   },
 
+  // Project kanban boards and the agents launched on their cards.
+  kanban: {
+    board: (projectId: string) =>
+      get(`/api/kanban/projects/${encodeURIComponent(projectId)}/cards`),
+    createCard: (projectId: string, body: {
+      title: string;
+      description?: string;
+      column?: string;
+      provider?: string;
+      model?: string | null;
+      attachments?: unknown[];
+    }) => post(`/api/kanban/projects/${encodeURIComponent(projectId)}/cards`, body),
+    // Queues cards for the agent one at a time: the given ids, or a whole column (default: todo).
+    queue: (projectId: string, body: { cardIds?: string[]; column?: string } = {}) =>
+      post(`/api/kanban/projects/${encodeURIComponent(projectId)}/queue`, body),
+    card: (cardId: string) => get(`/api/kanban/cards/${encodeURIComponent(cardId)}`),
+    updateCard: (cardId: string, body: Record<string, unknown>) =>
+      patch(`/api/kanban/cards/${encodeURIComponent(cardId)}`, body),
+    deleteCard: (cardId: string) => del(`/api/kanban/cards/${encodeURIComponent(cardId)}`),
+    // A comment relaunches the agent on the card unless `relaunch` is false.
+    addComment: (cardId: string, body: { body: string; attachments?: unknown[]; relaunch?: boolean }) =>
+      post(`/api/kanban/cards/${encodeURIComponent(cardId)}/comments`, body),
+    run: (cardId: string, body: { newSession?: boolean } = {}) =>
+      post(`/api/kanban/cards/${encodeURIComponent(cardId)}/run`, body),
+    stop: (cardId: string) => post(`/api/kanban/cards/${encodeURIComponent(cardId)}/stop`),
+    cardForSession: (sessionId: string) =>
+      get(`/api/kanban/sessions/${encodeURIComponent(sessionId)}/card`),
+    // What the agent is doing on a card right now (live steps of its run).
+    activity: (cardId: string) => get(`/api/kanban/cards/${encodeURIComponent(cardId)}/activity`),
+    // External tracker (Jira…) linked to a project board. The token is write-only.
+    connector: (projectId: string) =>
+      get(`/api/kanban/projects/${encodeURIComponent(projectId)}/connector`),
+    saveConnector: (projectId: string, body: { type: string; config: unknown; secret?: string; enabled: boolean }) =>
+      put(`/api/kanban/projects/${encodeURIComponent(projectId)}/connector`, body),
+    deleteConnector: (projectId: string) =>
+      del(`/api/kanban/projects/${encodeURIComponent(projectId)}/connector`),
+    testConnector: (projectId: string, body: { type: string; config: unknown; secret?: string }) =>
+      post(`/api/kanban/projects/${encodeURIComponent(projectId)}/connector/test`, body),
+    syncConnector: (projectId: string) =>
+      post(`/api/kanban/projects/${encodeURIComponent(projectId)}/connector/sync`),
+    // The agent that turns a free-form request into cards on the board.
+    plan: (projectId: string, body: { prompt: string; model?: string | null; attachments?: unknown[] }) =>
+      post(`/api/kanban/projects/${encodeURIComponent(projectId)}/plan`, body),
+    plans: (projectId: string) => get(`/api/kanban/projects/${encodeURIComponent(projectId)}/plans`),
+    sessionActivity: (sessionId: string) =>
+      get(`/api/kanban/sessions/${encodeURIComponent(sessionId)}/activity`),
+  },
+
   // Workspace file tree
   readFile: (projectId: string, filePath: string) =>
     get(`/api/file-tree/projects/${projectId}/file${query({ filePath })}`),

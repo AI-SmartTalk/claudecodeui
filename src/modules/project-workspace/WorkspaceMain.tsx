@@ -4,6 +4,7 @@ import { ChatInterface } from '@/modules/chat';
 import { FileTree } from '@/modules/file-tree';
 import { StandaloneShell } from '@/modules/standalone-shell';
 import { DockerPanel } from '@/modules/docker';
+import { KanbanPanel } from '@/modules/kanban';
 import { GitPanel } from '@/modules/git-panel';
 import { PluginTabContent } from '@/modules/plugins';
 import { BrowserUsePanel, useBrowserUseEnabled } from '@/modules/browser-use';
@@ -38,7 +39,7 @@ type WorkspaceMainProps = {
   onProjectsRefresh: () => void;
 };
 
-/** Rendered by ProjectMainRegion to show the selected project's active tab: chat, files, shell, git, tasks, browser or a plugin. */
+/** Rendered by ProjectMainRegion to show the selected project's active tab: chat, kanban, files, shell, git, tasks, browser or a plugin. */
 function WorkspaceMain({
   selectedProject,
   selectedSession,
@@ -108,6 +109,12 @@ function WorkspaceMain({
   const showAllTasks = useCallback(() => {
     setActiveTab('tasks');
   }, [setActiveTab]);
+
+  // A card's conversation opens in the chat tab, like picking it in the sidebar.
+  const openKanbanSession = useCallback((sessionId: string) => {
+    onNavigateToSession(sessionId);
+    setActiveTab('chat');
+  }, [onNavigateToSession, setActiveTab]);
 
   const openFile = useCallback((filePath: string) => {
     setActiveTab('files');
@@ -212,6 +219,16 @@ function WorkspaceMain({
           {shouldShowBrowserTab && activeTab === 'browser' && (
             <div className="h-full overflow-hidden">
               <BrowserUsePanel isVisible={activeTab === 'browser'} onShowSettings={onShowSettings} />
+            </div>
+          )}
+
+          {activeTab === 'kanban' && (
+            <div className="h-full overflow-hidden">
+              <KanbanPanel
+                selectedProject={selectedProject}
+                isVisible={activeTab === 'kanban'}
+                onOpenSession={openKanbanSession}
+              />
             </div>
           )}
 

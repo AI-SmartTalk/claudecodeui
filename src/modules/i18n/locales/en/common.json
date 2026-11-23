@@ -25,7 +25,8 @@
     "tasks": "Tasks",
     "docker": "Docker",
     "browser": "Browser",
-    "computer": "Computer"
+    "computer": "Computer",
+    "kanban": "Kanban"
   },
   "status": {
     "loading": "Loading...",
@@ -391,5 +392,143 @@
     "taskRowNotLoaded": "Launched earlier in this conversation; click to load it",
     "taskOfAgent": "Launched by one of this session's agents"
   },
-  "cancel": "Cancel"
+  "cancel": "Cancel",
+  "kanban": {
+    "title": "Board",
+    "newCard": "New card",
+    "runTodo": "Run \"To do\"",
+    "queuedCount_one": "{{count}} card queued: the agent works through them one at a time.",
+    "queuedCount_other": "{{count}} cards queued: the agent works through them one at a time.",
+    "nothingToQueue": "No card waiting in \"To do\".",
+    "columns": {
+      "backlog": "Backlog",
+      "todo": "To do",
+      "in_progress": "In progress",
+      "review": "To test",
+      "done": "Done"
+    },
+    "status": {
+      "running": "Agent working",
+      "queued": "Queued",
+      "failed": "Failed"
+    },
+    "fields": {
+      "column": "Column",
+      "provider": "Agent",
+      "model": "Model",
+      "description": "Description"
+    },
+    "model": {
+      "default": "Default"
+    },
+    "comment": {
+      "agent": "Agent",
+      "system": "System",
+      "you": "You",
+      "pending": "waiting for the agent",
+      "youShort": "Me"
+    },
+    "errors": {
+      "titleRequired": "A title is required."
+    },
+    "titlePlaceholder": "What needs doing?",
+    "descriptionPlaceholder": "Context, acceptance criteria, how to test… (markdown)",
+    "attach": "Attach",
+    "conversations": "Conversations",
+    "noConversation": "No conversation yet. Launch the agent to start one.",
+    "deleted": "deleted",
+    "active": "active",
+    "comments": "Comments",
+    "commentPlaceholder": "Feedback for the agent…",
+    "relaunchOnComment": "Relaunch the agent",
+    "sendComment": "Comment",
+    "create": "Create",
+    "createAndRun": "Create and launch",
+    "delete": "Delete",
+    "save": "Save",
+    "stop": "Stop",
+    "unqueue": "Remove from queue",
+    "newConversation": "New conversation",
+    "continue": "Continue",
+    "launch": "Launch agent",
+    "lastRunFailed": "Last run failed:",
+    "confirmDelete": "Delete this card and its comments? Its conversations are kept.",
+    "activity": {
+      "working": "The agent is working",
+      "follow": "Follow live",
+      "starting": "Starting… the first steps will show up here."
+    },
+    "moveTo": "Move to",
+    "toTestSummary": "To test",
+    "add": "Add",
+    "summary": {
+      "running_one": "{{count}} in progress",
+      "running_other": "{{count}} in progress",
+      "queued_one": "{{count}} queued",
+      "queued_other": "{{count}} queued",
+      "review_one": "{{count}} to test",
+      "review_other": "{{count}} to test",
+      "idle_one": "{{count}} card",
+      "idle_other": "{{count}} cards"
+    },
+    "empty": {
+      "backlog": "Ideas and tickets not planned yet.",
+      "todo": "What the agent should pick up next.",
+      "in_progress": "Cards the agent is working on.",
+      "review": "Finished by the agent — your turn to test.",
+      "done": "Tested and validated."
+    },
+    "connector": {
+      "title": "External source",
+      "subtitle": "Import tickets as cards and keep their status in sync.",
+      "soon": "Coming soon",
+      "lastSync": "Last sync {{when}} · {{count}} tickets",
+      "neverSynced": "Not synced yet",
+      "account": "Account",
+      "siteUrl": "Site URL",
+      "token": "API token",
+      "createToken": "Create one",
+      "tokenSaved": "•••••• saved — leave empty to keep",
+      "tickets": "Tickets to import",
+      "projectKey": "Jira project key",
+      "importDone": "Also import finished tickets",
+      "hideJql": "Hide custom JQL",
+      "showJql": "Use a custom JQL query",
+      "jqlHelp": "Overrides the project key when set.",
+      "mapping": "Status → column",
+      "test": "Test connection",
+      "connectedAs": "Connected as {{account}}",
+      "mappingHelp": "Test the connection to list your Jira statuses and choose their column. By default: To do → Backlog, In progress → In progress, Done → Done.",
+      "backToJira": "Back to Jira",
+      "pushStatus": "Move the ticket when its card moves",
+      "pushStatusHelp": "E.g. the agent finishes → the ticket goes to a \"review/test\" status.",
+      "postComments": "Post the agent's summary as a ticket comment",
+      "enabled": "Sync automatically every 5 minutes",
+      "confirmUnlink": "Unlink this source? Imported cards stay on the board.",
+      "unlink": "Unlink",
+      "saveAndSync": "Save and sync",
+      "link": "Link a source",
+      "syncNow": "Sync now",
+      "syncResult": "{{total}} tickets · {{created}} new · {{updated}} updated"
+    },
+    "preview": "Preview",
+    "edit": "Edit",
+    "attachments": "Attachments",
+    "noComments": "The agent's summary and your feedback will show up here.",
+    "whatToTest": "What the agent did — to test",
+    "markDone": "Validate → Done",
+    "unsaved": "Unsaved changes",
+    "plan": {
+      "title": "Prepare cards with the agent",
+      "subtitle": "It reads the project, splits the work and creates the cards in the backlog. It changes no file.",
+      "placeholder": "What should be done? A feature, a bug, a spec to split, a review…",
+      "attach": "Spec, mockup…",
+      "start": "Prepare the cards",
+      "cancel": "Cancel",
+      "button": "Prepare with the agent",
+      "running": "Preparing cards: {{prompt}}",
+      "finished": "Preparation finished — new cards are in the backlog.",
+      "openConversation": "Open the conversation"
+    }
+  }
 }

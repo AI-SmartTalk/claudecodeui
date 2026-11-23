@@ -2,6 +2,10 @@ import { Database } from 'better-sqlite3';
 
 import {
   APP_CONFIG_TABLE_SCHEMA_SQL,
+  KANBAN_CARD_COMMENTS_TABLE_SCHEMA_SQL,
+  KANBAN_CARD_SESSIONS_TABLE_SCHEMA_SQL,
+  KANBAN_CONNECTORS_TABLE_SCHEMA_SQL,
+  KANBAN_CARDS_TABLE_SCHEMA_SQL,
   LAST_SCANNED_AT_SQL,
   NOTIFICATION_CHANNEL_ENDPOINTS_TABLE_SCHEMA_SQL,
   PROJECTS_TABLE_SCHEMA_SQL,
@@ -521,6 +525,16 @@ export const runMigrations = (db: Database) => {
     addForkedFromSessionIdColumn(db);
     ensureProjectsForSessionPaths(db);
     db.exec(SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL);
+    // After the projects rebuild: cards reference projects(project_id).
+    db.exec(KANBAN_CARDS_TABLE_SCHEMA_SQL);
+    db.exec(KANBAN_CARD_SESSIONS_TABLE_SCHEMA_SQL);
+    db.exec(KANBAN_CARD_COMMENTS_TABLE_SCHEMA_SQL);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_kanban_cards_project ON kanban_cards(project_id, column_key, position)');
+    db.exec(KANBAN_CONNECTORS_TABLE_SCHEMA_SQL);
+    // One card per external ticket and project; NULL sources (local cards) never collide.
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_kanban_cards_external ON kanban_cards(project_id, source, external_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_kanban_card_sessions_session ON kanban_card_sessions(session_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_kanban_card_comments_card ON kanban_card_comments(card_id, created_at)');
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_provider_session_id ON sessions(provider_session_id)');

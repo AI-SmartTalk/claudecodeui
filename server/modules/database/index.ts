@@ -25,3 +25,13 @@ export { userPreferencesDb } from '@/modules/database/repositories/user-preferen
 export { vapidKeysDb } from '@/modules/database/repositories/vapid-keys.js';
 export { scheduledMessagesDb } from './repositories/scheduled-messages.db.js';
 export type { ScheduledMessageRow, ScheduledMessageStatus } from './repositories/scheduled-messages.db.js';
+// kanbanDb: used by the Kanban module to persist project boards, linked conversations and card comments.
+export { kanbanDb } from './repositories/kanban.db.js';
+export type {
+  KanbanAgentStatus,
+  KanbanCardRow,
+  KanbanCardSessionRow,
+  KanbanColumnKey,
+  KanbanCommentAuthor,
+  KanbanCommentRow,
+} from './repositories/kanban.db.js';

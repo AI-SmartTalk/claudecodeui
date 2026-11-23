@@ -250,6 +250,81 @@ CREATE TABLE IF NOT EXISTS superseded_provider_sessions (
 );
 `;
 
+/**
+ * Kanban cards, one board per project.
+ *
+ * A card is a unit of work an agent can be launched on. `column_key` is one of
+ * backlog | todo | in_progress | review | done; `position` orders cards inside
+ * a column (fractional, so a move rewrites one row). `provider`/`model` say
+ * who works on the card — a NULL model means "the app's default model for that
+ * provider", resolved when a run starts so changing the default in Settings
+ * applies to every card that never picked one.
+ *
+ * `agent_status` is idle | queued | running | failed. It is the card's own
+ * view of its agent: the run registry knows whether a session is busy, but
+ * only the card knows a run was asked for it and how the last one ended.
+ */
+export const KANBAN_CARDS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS kanban_cards (
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    column_key TEXT NOT NULL DEFAULT 'backlog',
+    position REAL NOT NULL DEFAULT 0,
+    provider TEXT NOT NULL DEFAULT 'claude',
+    model TEXT DEFAULT NULL,
+    -- Attachment descriptors (same shape as chat attachments, files in the
+    -- global upload store) as a JSON array.
+    attachments TEXT NOT NULL DEFAULT '[]',
+    agent_status TEXT NOT NULL DEFAULT 'idle',
+    agent_error TEXT DEFAULT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE
+);
+`;
+
+/**
+ * Conversations linked to a kanban card, oldest first; the newest one is the
+ * card's active conversation, the one a comment continues.
+ *
+ * No foreign key to `sessions`: a conversation deleted from the sidebar must
+ * not take the card's history of having had it down with it, and readers
+ * already join and tolerate a missing row.
+ */
+export const KANBAN_CARD_SESSIONS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS kanban_card_sessions (
+    card_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (card_id, session_id),
+    FOREIGN KEY (card_id) REFERENCES kanban_cards(id) ON DELETE CASCADE
+);
+`;
+
+/**
+ * The comment thread of a kanban card.
+ *
+ * `author` is user | agent | system. A user comment is what relaunches the
+ * agent; `delivered_at` stays NULL until a run has carried it to the agent, so
+ * a comment written while the agent is still working is sent with the next run
+ * instead of being lost or interrupting the current one.
+ */
+export const KANBAN_CARD_COMMENTS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS kanban_card_comments (
+    id TEXT PRIMARY KEY NOT NULL,
+    card_id TEXT NOT NULL,
+    author TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    attachments TEXT NOT NULL DEFAULT '[]',
+    session_id TEXT DEFAULT NULL,
+    delivered_at DATETIME DEFAULT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (card_id) REFERENCES kanban_cards(id) ON DELETE CASCADE
+);
+`;
+
 export const INIT_SCHEMA_SQL = `
 -- Initialize authentication database
 PRAGMA foreign_keys = ON;
@@ -303,4 +378,6 @@ ${USER_PREFERENCES_TABLE_SCHEMA_SQL}
 ${SESSION_DRAFTS_TABLE_SCHEMA_SQL}
 
 ${SUPERSEDED_PROVIDER_SESSIONS_TABLE_SCHEMA_SQL}
+-- NOTE: Kanban tables reference projects(project_id), so they are created in
+-- migrations after the projects table has been repaired to its keyed shape.
 `;

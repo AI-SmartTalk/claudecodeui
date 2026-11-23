@@ -48,6 +48,7 @@ import {
     initializeScheduledMessageDispatcher,
     scheduledMessagesRoutes,
 } from './modules/scheduled-messages/index.js';
+import { initializeKanbanAgents, kanbanRoutes } from './modules/kanban/index.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
@@ -198,6 +199,8 @@ app.use('/api/browser-use', authenticateToken, browserUseRoutes);
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
 app.use('/api/scheduled-messages', authenticateToken, scheduledMessagesRoutes);
+// Project kanban boards and the agents launched on their cards
+app.use('/api/kanban', authenticateToken, kanbanRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
@@ -379,6 +382,11 @@ async function startServer() {
             // Sends anything that came due while the server was not running,
             // then keeps polling.
             initializeScheduledMessageDispatcher(providerRuntimeService);
+            // Installs the card agent runner; cards a previous process left
+            // running are reported as interrupted, queued ones start again.
+            await initializeKanbanAgents(providerRuntimeService).catch((error: unknown) => {
+                console.error('[Kanban] Initialization failed:', getErrorMessage(error));
+            });
 
             // Start server-side plugin processes for enabled plugins
             startEnabledPluginServers().catch(err => {

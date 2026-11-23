@@ -24,7 +24,8 @@
     "git": "Contrôle de source",
     "tasks": "Tâches",
     "browser": "Navigateur",
-    "computer": "Ordinateur"
+    "computer": "Ordinateur",
+    "kanban": "Kanban"
   },
   "status": {
     "loading": "Chargement...",
@@ -267,5 +268,65 @@
       "closeSidebar": "Masquer la barre latérale",
       "resizeSidebar": "Redimensionner la barre latérale"
     }
+  },
+  "kanban": {
+    "title": "Tableau",
+    "newCard": "Nouvelle carte",
+    "runTodo": "Lancer « À faire »",
+    "queuedCount_one": "{{count}} carte en file : l'agent les traite une par une.",
+    "queuedCount_other": "{{count}} cartes en file : l'agent les traite une par une.",
+    "nothingToQueue": "Aucune carte dans « À faire ».",
+    "columns": {
+      "backlog": "Backlog",
+      "todo": "À faire",
+      "in_progress": "En cours",
+      "review": "À tester",
+      "done": "Fait"
+    },
+    "status": {
+      "running": "L'agent travaille",
+      "queued": "En file",
+      "failed": "Échec"
+    },
+    "fields": {
+      "column": "Colonne",
+      "provider": "Agent",
+      "model": "Modèle",
+      "description": "Description"
+    },
+    "model": {
+      "default": "Par défaut"
+    },
+    "comment": {
+      "agent": "Agent",
+      "system": "Système",
+      "you": "Toi",
+      "pending": "en attente de l'agent"
+    },
+    "errors": {
+      "titleRequired": "Le titre est obligatoire."
+    },
+    "titlePlaceholder": "Que faut-il faire ?",
+    "descriptionPlaceholder": "Contexte, critères d'acceptation, comment tester… (markdown)",
+    "attach": "Joindre",
+    "conversations": "Conversations",
+    "noConversation": "Pas encore de conversation. Lance l'agent pour en démarrer une.",
+    "deleted": "supprimée",
+    "active": "active",
+    "comments": "Commentaires",
+    "commentPlaceholder": "Un retour pour l'agent…",
+    "relaunchOnComment": "Relancer l'agent",
+    "sendComment": "Commenter",
+    "create": "Créer",
+    "createAndRun": "Créer et lancer",
+    "delete": "Supprimer",
+    "save": "Enregistrer",
+    "stop": "Arrêter",
+    "unqueue": "Retirer de la file",
+    "newConversation": "Nouvelle conversation",
+    "continue": "Continuer",
+    "launch": "Lancer l'agent",
+    "lastRunFailed": "Dernier lancement en échec :",
+    "confirmDelete": "Supprimer cette carte et ses commentaires ? Ses conversations sont conservées."
   }
 }

@@ -31,7 +31,10 @@ async function withIsolatedDatabase(runTest: () => Promise<void>): Promise<void>
   }
 }
 
-type JiraIssueFixture = { id: string; key: string; summary: string; status: string; category: string; updated: string };
+type JiraIssueFixture = {
+  id: string; key: string; summary: string; status: string; category: string; updated: string;
+  attachments?: Array<{ id: string; filename: string; mimeType: string; size: number }>;
+};
 
 /** A tiny in-memory Jira Cloud answering the endpoints the connector calls. */
 function createFakeJira(issues: JiraIssueFixture[]) {
@@ -67,6 +70,7 @@ function createFakeJira(issues: JiraIssueFixture[]) {
             issuetype: { name: 'Bug' },
             labels: ['front'],
             updated: issue.updated,
+            attachment: issue.attachments ?? [],
           },
         })),
       });
@@ -78,6 +82,8 @@ function createFakeJira(issues: JiraIssueFixture[]) {
       });
     }
     if (transitionsMatch && method === 'POST') return new Response(null, { status: 204 });
+    const attachmentMatch = url.pathname.match(/^\/rest\/api\/3\/attachment\/content\/(.+)$/);
+    if (attachmentMatch) return new Response(`bytes-of-${attachmentMatch[1]}`, { status: 200 });
     if (/^\/rest\/api\/2\/issue\/[^/]+\/comment$/.test(url.pathname)) return json({ id: 'c1' }, 201);
     return json({ errorMessages: ['not found'] }, 404);
   };
@@ -237,5 +243,41 @@ test('connector settings are validated and rejected credentials read clearly', a
       result.statuses.map((status) => `${status.name}:${status.column}`),
       ['To Do:backlog', 'In Progress:in_progress', 'In Review:in_progress', 'Done:done'],
     );
+  });
+});
+
+test('ticket attachments are copied once into the upload store and given to the card', async () => {
+  await withIsolatedDatabase(async () => {
+    const projectId = projectsDb.createProjectPath('/workspace/jira')!.project!.project_id;
+    const issues: JiraIssueFixture[] = [{
+      id: '9', key: 'APP-9', summary: 'Maquette', status: 'To Do', category: 'new', updated: 't1',
+      attachments: [
+        { id: 'a1', filename: 'maquette login.png', mimeType: 'image/png', size: 12 },
+        { id: 'a2', filename: 'huge.mov', mimeType: 'video/quicktime', size: 50 * 1024 * 1024 },
+      ],
+    }];
+    const jira = createFakeJira(issues);
+    const stored: Array<{ name: string; data: string }> = [];
+    const sync = createKanbanSyncService([createJiraCloudConnector(jira.fetchImpl)], async (name, data) => {
+      stored.push({ name, data: data.toString() });
+      return `/assets/${name}`;
+    });
+    setKanbanRuntime({ sync });
+    linkJira(projectId);
+
+    await kanbanService.syncConnector(projectId);
+    const card = kanbanService.listBoard(projectId).cards[0];
+    const imported = card.attachments as Array<{ path: string; name: string; mimeType?: string }>;
+    kanbanService.updateCard(card.id, { attachments: [...imported, { path: '/assets/local.png', name: 'local.png' }] });
+    assert.deepEqual(stored, [{ name: 'jira-a1-maquette_login.png', data: 'bytes-of-a1' }]);
+    assert.equal(imported[0].path, '/assets/jira-a1-maquette_login.png');
+    assert.equal(imported[0].mimeType, 'image/png');
+
+    // The ticket changes: the same attachment is not downloaded twice, and local files stay.
+    issues[0].updated = 't2';
+    await kanbanService.syncConnector(projectId);
+    assert.equal(stored.length, 1);
+    const after = kanbanService.getCard(card.id).attachments as Array<{ name: string }>;
+    assert.deepEqual(after.map((attachment) => attachment.name), ['maquette login.png', 'local.png']);
   });
 });

@@ -1601,6 +1601,16 @@ export type KanbanExternalTicket = {
     labels?: string[];
     assignee?: string | null;
   };
+  /** Files attached to the ticket; downloaded once into the upload store so agents can read them. */
+  attachments: KanbanExternalAttachment[];
+};
+
+/** A file attached to a tracker ticket, as listed (not yet downloaded). */
+export type KanbanExternalAttachment = {
+  id: string;
+  filename: string;
+  mimeType: string | null;
+  size: number | null;
 };
 
 /**
@@ -1624,6 +1634,7 @@ export type KanbanConnectorContext = {
  *   board column; it returns the resulting status name, or null when no
  *   transition fits (the move is then simply not mirrored).
  * - `addComment` posts a plain-text comment on a ticket.
+ * - `downloadAttachment` returns the bytes of one ticket attachment.
  */
 export type KanbanTrackerConnector = {
   type: string;
@@ -1631,4 +1642,6 @@ export type KanbanTrackerConnector = {
   fetchTickets(context: KanbanConnectorContext): Promise<KanbanExternalTicket[]>;
   moveTicket(context: KanbanConnectorContext, ticketKey: string, column: KanbanBoardColumn): Promise<string | null>;
   addComment(context: KanbanConnectorContext, ticketKey: string, body: string): Promise<void>;
+  /** Downloads one ticket attachment's bytes. */
+  downloadAttachment(context: KanbanConnectorContext, attachmentId: string): Promise<Buffer>;
 };

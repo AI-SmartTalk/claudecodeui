@@ -393,6 +393,18 @@
     "noComments": "Le résumé de l'agent et tes retours s'afficheront ici.",
     "whatToTest": "Ce que l'agent a fait, à tester",
     "markDone": "Valider → Fait",
-    "unsaved": "Modifications non enregistrées"
+    "unsaved": "Modifications non enregistrées",
+    "plan": {
+      "title": "Préparer les cartes avec l'agent",
+      "subtitle": "Il lit le projet, découpe le travail et crée les cartes dans le Backlog, sans modifier aucun fichier.",
+      "placeholder": "Que faut-il faire ? Une fonctionnalité, un bug, une spec à découper, une revue…",
+      "attach": "Spec, maquette…",
+      "start": "Préparer les cartes",
+      "cancel": "Annuler",
+      "button": "Préparer avec l'agent",
+      "running": "Préparation des cartes : {{prompt}}",
+      "finished": "Préparation terminée : les nouvelles cartes sont dans le Backlog.",
+      "openConversation": "Ouvrir la conversation"
+    }
   }
 }

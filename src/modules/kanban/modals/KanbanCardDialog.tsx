@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import {
   AlertTriangle,
   Bot,
+  Download,
   ExternalLink,
   FlaskConical,
   Loader2,
@@ -31,8 +30,9 @@ import type {
   LLMProvider,
 } from '@/shared/types';
 import { formatRelativeTime } from '@/shared/utils';
+import { ProjectMarkdown } from '@/modules/chat';
 import KanbanAgentActivity from '@/modules/kanban/KanbanAgentActivity';
-import { useKanbanModels } from '@/modules/kanban/hooks/useKanbanModels';
+import KanbanModelSelect from '@/modules/kanban/KanbanModelSelect';
 
 /** Refresh rate of an open card, so the agent's reply shows up without reopening it. */
 const CARD_POLL_INTERVAL_MS = 3000;
@@ -120,7 +120,19 @@ function AttachmentPreview({ attachment, onRemove }: { attachment: ChatAttachmen
           <img src={imageUrl} alt={label} className="h-16 w-16 rounded object-cover" />
         </a>
       ) : (
-        <span className="flex items-center gap-1 px-1 py-0.5"><Paperclip className="h-3 w-3" />{label}</span>
+        <button
+          type="button"
+          onClick={() => void downloadAttachment(attachment).catch(() => undefined)}
+          className="flex max-w-56 items-center gap-1.5 px-1.5 py-1 text-left hover:text-primary"
+          title={label}
+        >
+          <Paperclip className="h-3 w-3 shrink-0" />
+          <span className="truncate">{label}</span>
+          {typeof attachment.size === 'number' && (
+            <span className="shrink-0 text-muted-foreground">{Math.max(1, Math.round(attachment.size / 1024))} Ko</span>
+          )}
+          <Download className="h-3 w-3 shrink-0 opacity-60" />
+        </button>
       )}
       {onRemove && (
         <button
@@ -136,16 +148,38 @@ function AttachmentPreview({ attachment, onRemove }: { attachment: ChatAttachmen
   );
 }
 
-/** Markdown with the app's typography, for descriptions, replies and comments. */
-function Markdown({ text }: { text: string }) {
+/**
+ * Card text rendered like a chat message (code highlighting, Mermaid, math,
+ * images and file links resolved in the project), with compact prose spacing.
+ */
+function Markdown({ text, projectId, breaks }: { text: string; projectId: string; breaks?: boolean }) {
   return (
-    <div className="prose prose-sm max-w-none break-words dark:prose-invert prose-p:my-1.5 prose-pre:my-2 [&_pre]:overflow-x-auto">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
-    </div>
+    <ProjectMarkdown
+      projectId={projectId}
+      breaks={breaks}
+      className="prose prose-sm max-w-none break-words dark:prose-invert prose-p:my-1.5 prose-pre:my-2 [&_pre]:overflow-x-auto"
+    >
+      {text}
+    </ProjectMarkdown>
   );
 }
 
-function CommentEntry({ comment }: { comment: KanbanComment }) {
+/** Downloads an upload-store file through the authenticated assets route. */
+async function downloadAttachment(attachment: ChatAttachment): Promise<void> {
+  if (!attachment.path) return;
+  const response = await api.assets.file(basename(attachment.path));
+  if (!response.ok) {
+    throw new Error(`Download failed (${response.status})`);
+  }
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = attachment.name || basename(attachment.path);
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+function CommentEntry({ comment, projectId }: { comment: KanbanComment; projectId: string }) {
   const { t, i18n } = useTranslation();
   if (comment.author === 'system') {
     return (
@@ -174,7 +208,7 @@ function CommentEntry({ comment }: { comment: KanbanComment }) {
             </span>
           )}
         </div>
-        {comment.body && <Markdown text={comment.body} />}
+        {comment.body && <Markdown text={comment.body} projectId={projectId} breaks={!isAgent} />}
         {comment.attachments.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {comment.attachments.map((attachment, index) => (
@@ -184,29 +218,6 @@ function CommentEntry({ comment }: { comment: KanbanComment }) {
         )}
       </div>
     </div>
-  );
-}
-
-/** The model menu of a card: "Default (…)" plus the provider's catalog. */
-function ModelSelect({ provider, value, onChange }: {
-  provider: LLMProvider;
-  value: string | null;
-  onChange: (model: string | null) => void;
-}) {
-  const { t } = useTranslation();
-  const { options, defaultLabel } = useKanbanModels(provider);
-  return (
-    <select value={value ?? ''} onChange={(event) => onChange(event.target.value || null)} className={fieldClass}>
-      <option value="">
-        {defaultLabel && !/^default/i.test(defaultLabel)
-          ? `${t('kanban.model.default', { defaultValue: 'Default' })} · ${defaultLabel}`
-          : t('kanban.model.default', { defaultValue: 'Default' })}
-      </option>
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>{option.label}</option>
-      ))}
-      {value && !options.some((option) => option.value === value) && <option value={value}>{value}</option>}
-    </select>
   );
 }
 
@@ -432,7 +443,7 @@ export default function KanbanCardDialog({
         </label>
         <label className="space-y-1 text-xs text-muted-foreground">
           <span>{t('kanban.fields.model', { defaultValue: 'Model' })}</span>
-          <ModelSelect provider={provider} value={model} onChange={(next) => { setModel(next); markDirty(); }} />
+          <KanbanModelSelect provider={provider} value={model} onChange={(next) => { setModel(next); markDirty(); }} className={fieldClass} />
         </label>
       </div>
 
@@ -455,7 +466,7 @@ export default function KanbanCardDialog({
           />
         ) : (
           <div className="max-h-80 overflow-y-auto rounded-md border border-border/50 bg-muted/20 px-3 py-2">
-            <Markdown text={description} />
+            <Markdown text={description} projectId={projectId} />
           </div>
         )}
       </div>
@@ -523,13 +534,13 @@ export default function KanbanCardDialog({
         )}
 
         {isRunning ? (
-          <KanbanAgentActivity cardId={card.id} onOpenSession={onOpenSession} />
+          <KanbanAgentActivity source={{ cardId: card.id }} onOpenSession={onOpenSession} />
         ) : card.latestAgentReply && (card.column === 'review' || card.column === 'done') ? (
           <div className="rounded-lg border border-violet-500/25 bg-violet-500/5 p-3">
             <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">
               <FlaskConical className="h-3.5 w-3.5" /> {t('kanban.whatToTest', { defaultValue: 'What the agent did — to test' })}
             </div>
-            <div className="max-h-64 overflow-y-auto"><Markdown text={card.latestAgentReply} /></div>
+            <div className="max-h-64 overflow-y-auto"><Markdown text={card.latestAgentReply} projectId={projectId} /></div>
           </div>
         ) : null}
 
@@ -572,7 +583,7 @@ export default function KanbanCardDialog({
               {t('kanban.noComments', { defaultValue: 'The agent\'s summary and your feedback will show up here.' })}
             </p>
           ) : (
-            card.comments.map((comment) => <CommentEntry key={comment.id} comment={comment} />)
+            card.comments.map((comment) => <CommentEntry key={comment.id} comment={comment} projectId={projectId} />)
           )}
           <div ref={threadEndRef} />
         </div>

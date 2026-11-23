@@ -12,7 +12,7 @@ const MAX_TICKETS_PER_SYNC = 300;
 const PAGE_SIZE = 100;
 const REQUEST_TIMEOUT_MS = 20_000;
 
-const SEARCH_FIELDS = ['summary', 'description', 'status', 'issuetype', 'priority', 'labels', 'assignee', 'updated'];
+const SEARCH_FIELDS = ['summary', 'description', 'status', 'issuetype', 'priority', 'labels', 'assignee', 'updated', 'attachment'];
 
 /** Jira Cloud settings as stored in the connector's `config`. */
 type JiraConfig = {
@@ -41,6 +41,7 @@ type JiraIssue = {
     labels?: string[];
     assignee?: { displayName?: string } | null;
     updated?: string;
+    attachment?: Array<{ id?: string | number; filename?: string; mimeType?: string; size?: number }>;
   };
 };
 
@@ -207,6 +208,13 @@ export function pickJiraTransition(
  */
 export function createJiraCloudConnector(fetchImpl: FetchLike = fetch): KanbanTrackerConnector {
   async function request<T>(context: KanbanConnectorContext, path: string, init: RequestInit = {}): Promise<T> {
+    const response = await send(context, path, init);
+    const text = await response.text();
+    return (text ? JSON.parse(text) : {}) as T;
+  }
+
+  /** Sends an authenticated request and maps failures to readable errors; the body is left unread. */
+  async function send(context: KanbanConnectorContext, path: string, init: RequestInit = {}): Promise<Response> {
     const config = readJiraConfig(context.config);
     const auth = Buffer.from(`${config.email}:${context.secret}`).toString('base64');
     let response: Response;
@@ -231,8 +239,8 @@ export function createJiraCloudConnector(fetchImpl: FetchLike = fetch): KanbanTr
         statusCode: 400,
       });
     }
-    const text = await response.text();
     if (!response.ok) {
+      const text = await response.text();
       let detail = text.slice(0, 300);
       try {
         const parsed = JSON.parse(text) as { errorMessages?: string[]; errors?: Record<string, string> };
@@ -245,7 +253,7 @@ export function createJiraCloudConnector(fetchImpl: FetchLike = fetch): KanbanTr
         statusCode: 502,
       });
     }
-    return (text ? JSON.parse(text) : {}) as T;
+    return response;
   }
 
   return {
@@ -307,6 +315,14 @@ export function createJiraCloudConnector(fetchImpl: FetchLike = fetch): KanbanTr
               labels: issue.fields.labels ?? [],
               assignee: issue.fields.assignee?.displayName ?? null,
             },
+            attachments: (issue.fields.attachment ?? [])
+              .filter((attachment) => attachment.id !== undefined)
+              .map((attachment) => ({
+                id: String(attachment.id),
+                filename: attachment.filename ?? `attachment-${attachment.id}`,
+                mimeType: attachment.mimeType ?? null,
+                size: typeof attachment.size === 'number' ? attachment.size : null,
+              })),
           });
         }
         nextPageToken = page.isLast ? undefined : page.nextPageToken;
@@ -327,6 +343,14 @@ export function createJiraCloudConnector(fetchImpl: FetchLike = fetch): KanbanTr
         body: JSON.stringify({ transition: { id: transition.id } }),
       });
       return transition.to?.name ?? null;
+    },
+
+    async downloadAttachment(context, attachmentId) {
+      // Jira answers with a redirect to its media service; fetch follows it with the auth header.
+      const response = await send(context, `/rest/api/3/attachment/content/${encodeURIComponent(attachmentId)}`, {
+        headers: { Accept: '*/*' },
+      });
+      return Buffer.from(await response.arrayBuffer());
     },
 
     async addComment(context, ticketKey, body) {

@@ -1868,6 +1868,14 @@ export type KanbanConnector = {
   lastSyncCount: number | null;
 };
 
+/** A planning run: the agent turning a request into cards, listed on the board while it works. */
+export type KanbanPlan = {
+  sessionId: string;
+  prompt: string;
+  startedAt: string;
+  running: boolean;
+};
+
 /** A tracker status returned by a connection test, with the column it maps to under the tested settings. */
 export type KanbanTrackerStatus = {
   name: string;

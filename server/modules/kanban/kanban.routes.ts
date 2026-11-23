@@ -194,6 +194,41 @@ router.post(
   }),
 );
 
+/** Starts an agent that turns a free-form request into cards on this board. */
+router.post(
+  '/projects/:projectId/plan',
+  asyncHandler(async (req: Request, res: Response) => {
+    const body = readBody(req);
+    const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+    if (!prompt) {
+      throw invalid('prompt is required.');
+    }
+    const result = await kanbanService.startPlanning(readParam(req, 'projectId'), {
+      prompt,
+      model: readModel(body.model),
+      attachments: readAttachments(body.attachments),
+      userId: readUserId(req),
+    });
+    res.status(201).json(createApiSuccessResponse(result));
+  }),
+);
+
+/** The project's recent planning runs and whether they still work. */
+router.get(
+  '/projects/:projectId/plans',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(createApiSuccessResponse(kanbanService.listPlans(readParam(req, 'projectId'))));
+  }),
+);
+
+/** What the agent of a conversation is doing right now (used for planning runs). */
+router.get(
+  '/sessions/:sessionId/activity',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(createApiSuccessResponse(kanbanService.getSessionActivity(readParam(req, 'sessionId'))));
+  }),
+);
+
 /** What the agent is doing on the card right now. */
 router.get(
   '/cards/:cardId/activity',

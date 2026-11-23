@@ -16,25 +16,32 @@ const STEP_ICONS: Record<KanbanActivityStep['kind'], typeof Wrench> = {
 };
 
 type KanbanAgentActivityProps = {
-  cardId: string;
+  /** Whose activity to follow: a card's agent, or a conversation (planning runs). */
+  source: { cardId: string } | { sessionId: string };
   onOpenSession: (sessionId: string) => void;
+  /** Heading of the strip; defaults to "the agent is working". */
+  title?: string;
 };
 
 /**
- * Rendered by the card dialog while the agent works: its last few steps
+ * Rendered by the card dialog and the board's planning strip while an agent works: its last few steps
  * (tool calls, messages) read from the live run, and a shortcut to follow the
  * conversation in the chat.
  */
-export default function KanbanAgentActivity({ cardId, onOpenSession }: KanbanAgentActivityProps) {
+export default function KanbanAgentActivity({ source, onOpenSession, title }: KanbanAgentActivityProps) {
   const { t, i18n } = useTranslation();
   // The latest live view of the run; null until the first poll answers.
   const [activity, setActivity] = useState<KanbanActivity | null>(null);
 
+  const sourceKey = 'cardId' in source ? `card:${source.cardId}` : `session:${source.sessionId}`;
+
   useEffect(() => {
     let cancelled = false;
+    const [kind, id] = [sourceKey.slice(0, sourceKey.indexOf(':')), sourceKey.slice(sourceKey.indexOf(':') + 1)];
     const poll = async () => {
       try {
-        const body = await readApiJson<{ data: KanbanActivity }>(await api.kanban.activity(cardId));
+        const response = kind === 'card' ? await api.kanban.activity(id) : await api.kanban.sessionActivity(id);
+        const body = await readApiJson<{ data: KanbanActivity }>(response);
         if (!cancelled) setActivity(body.data);
       } catch {
         // A missed poll is retried on the next tick.
@@ -46,7 +53,7 @@ export default function KanbanAgentActivity({ cardId, onOpenSession }: KanbanAge
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [cardId]);
+  }, [sourceKey]);
 
   const steps = activity?.steps ?? [];
 
@@ -57,7 +64,7 @@ export default function KanbanAgentActivity({ cardId, onOpenSession }: KanbanAge
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
           <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
         </span>
-        <span className="text-sm font-medium">{t('kanban.activity.working', { defaultValue: 'The agent is working' })}</span>
+        <span className="text-sm font-medium">{title ?? t('kanban.activity.working', { defaultValue: 'The agent is working' })}</span>
         {activity?.sessionId && (
           <button
             type="button"

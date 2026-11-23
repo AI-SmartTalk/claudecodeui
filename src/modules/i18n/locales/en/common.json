@@ -517,6 +517,18 @@
     "noComments": "The agent's summary and your feedback will show up here.",
     "whatToTest": "What the agent did — to test",
     "markDone": "Validate → Done",
-    "unsaved": "Unsaved changes"
+    "unsaved": "Unsaved changes",
+    "plan": {
+      "title": "Prepare cards with the agent",
+      "subtitle": "It reads the project, splits the work and creates the cards in the backlog. It changes no file.",
+      "placeholder": "What should be done? A feature, a bug, a spec to split, a review…",
+      "attach": "Spec, mockup…",
+      "start": "Prepare the cards",
+      "cancel": "Cancel",
+      "button": "Prepare with the agent",
+      "running": "Preparing cards: {{prompt}}",
+      "finished": "Preparation finished — new cards are in the backlog.",
+      "openConversation": "Open the conversation"
+    }
   }
 }

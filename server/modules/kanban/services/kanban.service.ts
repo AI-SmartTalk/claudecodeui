@@ -430,6 +430,26 @@ export const kanbanService = {
     return requireSync().syncProject(projectId);
   },
 
+  /** Starts the agent that turns a request into cards on this board. */
+  async startPlanning(projectId: string, input: { prompt: string; model: string | null; attachments: unknown[]; userId: number | null }) {
+    requireProject(projectId);
+    return requireRunner().startPlanning(projectId, input);
+  },
+
+  listPlans(projectId: string) {
+    requireProject(projectId);
+    return agentRunner?.listPlans(projectId) ?? [];
+  },
+
+  /** What the agent of any conversation is doing right now (planning runs have no card). */
+  getSessionActivity(sessionId: string): KanbanActivityDto {
+    return {
+      running: busyReader?.(sessionId) ?? false,
+      sessionId,
+      steps: activityReader?.(sessionId) ?? [],
+    };
+  },
+
   /** The card a conversation was opened from, so the chat can link back to it. */
   findCardBySession(sessionId: string): KanbanCardDto | null {
     const card = kanbanDb.findCardBySession(sessionId);

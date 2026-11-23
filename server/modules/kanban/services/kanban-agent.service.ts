@@ -38,6 +38,38 @@ type StartRunOptions = {
   newSession?: boolean;
 };
 
+/** Tools the planning agent may not use: it reads the code and fills the board, it does not change files. */
+const PLANNER_DISALLOWED_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
+
+/** Planning runs remembered per project for the board's "preparing" strip. */
+const MAX_PLANS_PER_PROJECT = 5;
+
+/** A planning run the board shows while (and shortly after) it works. */
+type KanbanPlan = { sessionId: string; prompt: string; startedAt: string };
+
+/**
+ * The planning agent's instructions. It explores the project read-only and
+ * creates the cards through the `cloudcli-kanban` MCP tools, so they show up on
+ * the board as it goes.
+ */
+function buildPlanningPrompt(request: string): string {
+  return [
+    'Tu prépares les cartes du tableau Kanban de ce projet à partir de cette demande :',
+    '',
+    request.trim(),
+    '',
+    '## Comment procéder',
+    '',
+    '1. Explore le code du projet pour comprendre ce qui est concerné. Lecture seule : ne modifie, ne crée et ne supprime aucun fichier, et ne lance aucune commande qui change l\'état du projet.',
+    '2. Consulte les cartes existantes avec l\'outil `kanban_list_cards` (serveur MCP `cloudcli-kanban`) pour ne pas créer de doublon ; complète plutôt une carte existante avec `kanban_update_card` ou `kanban_comment`.',
+    '3. Découpe le travail en cartes indépendantes, chacune réalisable par un agent en une seule session. Crée chaque carte avec `kanban_create_card` dans la colonne `backlog`.',
+    '4. Décris chaque carte en markdown avec ces sections : **Contexte**, **À faire**, **Critères d\'acceptation**, **Comment tester**, **Fichiers concernés** (chemins réels du projet). Un schéma Mermaid est bienvenu s\'il clarifie.',
+    '5. Termine par un court récapitulatif des cartes créées ou modifiées.',
+    '',
+    'Si les outils `kanban_*` ne sont pas disponibles, dis-le clairement et rédige les cartes dans ta réponse à la place.',
+  ].join('\n');
+}
+
 /** Longest agent reply copied onto the card; the full one is in the conversation. */
 const MAX_AGENT_COMMENT_LENGTH = 8000;
 
@@ -108,6 +140,9 @@ function buildFollowUpPrompt(card: KanbanCardRow, comments: KanbanCommentRow[]):
  * running, so a stop or a newer run is never overwritten by a late settle.
  */
 export function createKanbanAgentRunner(dependencies: KanbanAgentDependencies) {
+  /** Recent planning runs per project, newest first (in memory: they are only a progress strip). */
+  const plans = new Map<string, KanbanPlan[]>();
+
   /** Notifies the sync hook when a transition actually moved the card. */
   function notifyMove(cardId: string, before: KanbanColumnKey, after: KanbanColumnKey | undefined): void {
     if (after && after !== before) {
@@ -382,7 +417,52 @@ export function createKanbanAgentRunner(dependencies: KanbanAgentDependencies) {
     }
   }
 
-  return { startRun, stopRun, queueCards, recover };
+  /**
+   * Starts an agent that turns a free-form request into cards: a new
+   * conversation in the project, read-only, filling the board through the
+   * kanban MCP tools. Returns as soon as the run is admitted.
+   */
+  async function startPlanning(
+    projectId: string,
+    input: { prompt: string; model: string | null; attachments: unknown[]; userId: number | null },
+  ): Promise<{ sessionId: string }> {
+    const projectPath = dependencies.getProjectPath(projectId);
+    if (!projectPath) {
+      throw new AppError('Projet introuvable.', { code: 'PROJECT_NOT_FOUND', statusCode: 404 });
+    }
+    let model = input.model;
+    if (!model) {
+      model = await dependencies.getDefaultModel('claude').catch(() => null);
+    }
+    const sessionId = dependencies.createSession('claude', projectPath, `Préparation Kanban : ${input.prompt}`);
+    const list = [{ sessionId, prompt: input.prompt, startedAt: new Date().toISOString() }, ...(plans.get(projectId) ?? [])];
+    plans.set(projectId, list.slice(0, MAX_PLANS_PER_PROJECT));
+
+    void dependencies.runTurn({
+      sessionId,
+      userId: input.userId,
+      content: buildPlanningPrompt(input.prompt),
+      options: {
+        ...(model ? { model } : {}),
+        // Unattended, so no approvals; writing tools are removed instead.
+        permissionMode: 'bypassPermissions',
+        toolsSettings: { allowedTools: [], disallowedTools: PLANNER_DISALLOWED_TOOLS, skipPermissions: true },
+        attachments: input.attachments,
+        sessionSummary: 'Préparation Kanban',
+      },
+    }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[Kanban] Planning run failed', { projectId, sessionId, error: message });
+    });
+    return { sessionId };
+  }
+
+  /** The project's recent planning runs, with whether each is still working. */
+  function listPlans(projectId: string): Array<KanbanPlan & { running: boolean }> {
+    return (plans.get(projectId) ?? []).map((plan) => ({ ...plan, running: dependencies.isSessionBusy(plan.sessionId) }));
+  }
+
+  return { startRun, stopRun, queueCards, recover, startPlanning, listPlans };
 }
 
 /** The runner's public surface, as the Kanban service holds it. */

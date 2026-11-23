@@ -1,17 +1,20 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { DragEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Play, PlugZap, Plus, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Loader2, Play, PlugZap, Plus, RefreshCw, Sparkles, X } from 'lucide-react';
 
 import { Button } from '@/shared/ui';
 import { KANBAN_COLUMN_LABELS, KANBAN_COLUMN_ORDER } from '@/shared/constants';
 import type { KanbanCard, KanbanColumnKey, Project } from '@/shared/types';
 import { formatRelativeTime } from '@/shared/utils';
+import KanbanAgentActivity from '@/modules/kanban/KanbanAgentActivity';
 import KanbanCardTile, { KANBAN_CARD_DRAG_TYPE } from '@/modules/kanban/KanbanCardTile';
 import KanbanCardDialog from '@/modules/kanban/modals/KanbanCardDialog';
 import KanbanConnectorDialog from '@/modules/kanban/modals/KanbanConnectorDialog';
+import KanbanPlanDialog from '@/modules/kanban/modals/KanbanPlanDialog';
 import { useKanbanBoard } from '@/modules/kanban/hooks/useKanbanBoard';
 import { useKanbanConnector } from '@/modules/kanban/hooks/useKanbanConnector';
+import { useKanbanPlans } from '@/modules/kanban/hooks/useKanbanPlans';
 
 type KanbanPanelProps = {
   selectedProject: Project;
@@ -56,6 +59,9 @@ export function KanbanPanel({ selectedProject, isVisible, onOpenSession }: Kanba
   const [dialogTarget, setDialogTarget] = useState<DialogTarget>(null);
   // Whether the external-source settings are open.
   const [isConnectorOpen, setIsConnectorOpen] = useState(false);
+  // Whether the "prepare with the agent" request is open.
+  const [isPlanOpen, setIsPlanOpen] = useState(false);
+  const { plans, refresh: refreshPlans, dismiss: dismissPlan } = useKanbanPlans(projectId, isVisible);
   // The column a card is being dragged over, to highlight the drop target.
   const [dragOverColumn, setDragOverColumn] = useState<KanbanColumnKey | null>(null);
   // Feedback after queueing a column or syncing (counts, or why it failed).
@@ -156,6 +162,9 @@ export function KanbanPanel({ selectedProject, isVisible, onOpenSession }: Kanba
             <span className="hidden sm:inline">{t('kanban.connector.syncNow', { defaultValue: 'Sync now' })}</span>
           </Button>
         )}
+        <Button type="button" variant="outline" size="sm" onClick={() => setIsPlanOpen(true)}>
+          <Sparkles className="text-violet-500" /> <span className="hidden sm:inline">{t('kanban.plan.button', { defaultValue: 'Prepare with the agent' })}</span>
+        </Button>
         <Button type="button" variant="outline" size="sm" onClick={() => void handleQueueTodo()} disabled={todoCount === 0}>
           <Play /> <span className="hidden sm:inline">{t('kanban.runTodo', { defaultValue: 'Run "To do"' })}</span>
         </Button>
@@ -172,6 +181,33 @@ export function KanbanPanel({ selectedProject, isVisible, onOpenSession }: Kanba
           <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => { setNotice(null); setSyncMessage(null); }}>
             ✕
           </button>
+        </div>
+      )}
+
+      {plans.length > 0 && (
+        <div className="space-y-2 border-b border-border/40 px-3 py-2">
+          {plans.map((plan) => (plan.running ? (
+            <KanbanAgentActivity
+              key={plan.sessionId}
+              source={{ sessionId: plan.sessionId }}
+              onOpenSession={onOpenSession}
+              title={t('kanban.plan.running', { defaultValue: 'Preparing cards: {{prompt}}', prompt: plan.prompt.length > 80 ? `${plan.prompt.slice(0, 80)}…` : plan.prompt })}
+            />
+          ) : (
+            <div key={plan.sessionId} className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+              <span className="min-w-0 flex-1 truncate">
+                {t('kanban.plan.finished', { defaultValue: 'Preparation finished — new cards are in the backlog.' })}
+                <span className="ml-1 text-muted-foreground">{plan.prompt}</span>
+              </span>
+              <button type="button" className="shrink-0 text-xs text-primary hover:underline" onClick={() => onOpenSession(plan.sessionId)}>
+                {t('kanban.plan.openConversation', { defaultValue: 'Open the conversation' })}
+              </button>
+              <button type="button" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={() => dismissPlan(plan.sessionId)} aria-label="Dismiss">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )))}
         </div>
       )}
 
@@ -247,6 +283,17 @@ export function KanbanPanel({ selectedProject, isVisible, onOpenSession }: Kanba
           onClose={() => { setDialogTarget(null); void refresh(); }}
           onChanged={() => void refresh()}
           onOpenSession={handleOpenSession}
+        />
+      )}
+
+      {isPlanOpen && (
+        <KanbanPlanDialog
+          projectId={projectId}
+          onClose={() => setIsPlanOpen(false)}
+          onStarted={() => {
+            setIsPlanOpen(false);
+            void refreshPlans();
+          }}
         />
       )}
 

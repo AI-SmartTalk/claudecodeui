@@ -304,6 +304,12 @@ export const api = {
       post(`/api/kanban/projects/${encodeURIComponent(projectId)}/connector/test`, body),
     syncConnector: (projectId: string) =>
       post(`/api/kanban/projects/${encodeURIComponent(projectId)}/connector/sync`),
+    // The agent that turns a free-form request into cards on the board.
+    plan: (projectId: string, body: { prompt: string; model?: string | null; attachments?: unknown[] }) =>
+      post(`/api/kanban/projects/${encodeURIComponent(projectId)}/plan`, body),
+    plans: (projectId: string) => get(`/api/kanban/projects/${encodeURIComponent(projectId)}/plans`),
+    sessionActivity: (sessionId: string) =>
+      get(`/api/kanban/sessions/${encodeURIComponent(sessionId)}/activity`),
   },
 
   // Workspace file tree

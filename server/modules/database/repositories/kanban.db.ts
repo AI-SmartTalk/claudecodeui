@@ -23,8 +23,43 @@ export type KanbanCardRow = {
   attachments: string;
   agent_status: KanbanAgentStatus;
   agent_error: string | null;
+  source: string | null;
+  external_id: string | null;
+  external_key: string | null;
+  external_url: string | null;
+  external_status: string | null;
+  external_updated_at: string | null;
+  external_meta: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type KanbanConnectorRow = {
+  project_id: string;
+  type: string;
+  config: string;
+  secret: string | null;
+  enabled: number;
+  last_sync_at: string | null;
+  last_sync_error: string | null;
+  last_sync_count: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** A ticket as a connector hands it to the board, already mapped to a column. */
+export type KanbanExternalCardInput = {
+  projectId: string;
+  source: string;
+  externalId: string;
+  externalKey: string;
+  externalUrl: string | null;
+  externalStatus: string;
+  externalUpdatedAt: string | null;
+  externalMeta: Record<string, unknown>;
+  title: string;
+  description: string;
+  columnKey: KanbanColumnKey;
 };
 
 export type KanbanCardSessionRow = {
@@ -49,7 +84,11 @@ export type KanbanCommentRow = {
 };
 
 const CARD_COLUMNS =
-  'id, project_id, title, description, column_key, position, provider, model, attachments, agent_status, agent_error, created_at, updated_at';
+  'id, project_id, title, description, column_key, position, provider, model, attachments, agent_status, agent_error, '
+  + 'source, external_id, external_key, external_url, external_status, external_updated_at, external_meta, created_at, updated_at';
+
+const CONNECTOR_COLUMNS =
+  'project_id, type, config, secret, enabled, last_sync_at, last_sync_error, last_sync_count, created_at, updated_at';
 
 const COMMENT_COLUMNS =
   'id, card_id, author, body, attachments, session_id, delivered_at, created_at';
@@ -65,6 +104,7 @@ type KanbanCardPatch = Partial<{
   attachments: unknown[];
   agentStatus: KanbanAgentStatus;
   agentError: string | null;
+  externalStatus: string | null;
 }>;
 
 const PATCH_COLUMN_BY_FIELD: Record<keyof KanbanCardPatch, string> = {
@@ -77,6 +117,7 @@ const PATCH_COLUMN_BY_FIELD: Record<keyof KanbanCardPatch, string> = {
   attachments: 'attachments',
   agentStatus: 'agent_status',
   agentError: 'agent_error',
+  externalStatus: 'external_status',
 };
 
 // kanbanDb: used by the Kanban module to persist project boards, the
@@ -343,5 +384,125 @@ export const kanbanDb = {
       )
       .get(cardId) as { found: number } | undefined;
     return Boolean(row);
+  },
+
+  findCardByExternal(projectId: string, source: string, externalId: string): KanbanCardRow | null {
+    const row = getConnection()
+      .prepare(`SELECT ${CARD_COLUMNS} FROM kanban_cards WHERE project_id = ? AND source = ? AND external_id = ?`)
+      .get(projectId, source, externalId) as KanbanCardRow | undefined;
+    return row ?? null;
+  },
+
+  /**
+   * Creates or refreshes the card mirroring an external ticket.
+   *
+   * Content (title, description, meta) follows the tracker only when the
+   * ticket changed there since the last pull, so local edits survive a sync of
+   * an untouched ticket. The column follows the tracker only when the
+   * tracker's status changed, and never while the agent is working on the card.
+   */
+  upsertExternalCard(input: KanbanExternalCardInput): { card: KanbanCardRow; outcome: 'created' | 'updated' | 'unchanged' } {
+    const db = getConnection();
+    const existing = kanbanDb.findCardByExternal(input.projectId, input.source, input.externalId);
+    if (!existing) {
+      const id = randomUUID();
+      db.prepare(
+        `INSERT INTO kanban_cards (id, project_id, title, description, column_key, position, source, external_id,
+           external_key, external_url, external_status, external_updated_at, external_meta)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        id,
+        input.projectId,
+        input.title,
+        input.description,
+        input.columnKey,
+        kanbanDb.nextPosition(input.projectId, input.columnKey),
+        input.source,
+        input.externalId,
+        input.externalKey,
+        input.externalUrl,
+        input.externalStatus,
+        input.externalUpdatedAt,
+        JSON.stringify(input.externalMeta),
+      );
+      return { card: kanbanDb.getCard(id) as KanbanCardRow, outcome: 'created' };
+    }
+
+    const contentChanged = input.externalUpdatedAt !== existing.external_updated_at;
+    const statusChanged = input.externalStatus !== existing.external_status;
+    if (!contentChanged && !statusChanged) {
+      return { card: existing, outcome: 'unchanged' };
+    }
+    const moveColumn = statusChanged && existing.agent_status !== 'running' && input.columnKey !== existing.column_key;
+    db.prepare(
+      `UPDATE kanban_cards SET
+         title = CASE WHEN ? THEN ? ELSE title END,
+         description = CASE WHEN ? THEN ? ELSE description END,
+         external_meta = CASE WHEN ? THEN ? ELSE external_meta END,
+         external_key = ?, external_url = ?, external_status = ?, external_updated_at = ?,
+         column_key = CASE WHEN ? THEN ? ELSE column_key END,
+         position = CASE WHEN ? THEN ? ELSE position END,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    ).run(
+      contentChanged ? 1 : 0, input.title,
+      contentChanged ? 1 : 0, input.description,
+      contentChanged ? 1 : 0, JSON.stringify(input.externalMeta),
+      input.externalKey, input.externalUrl, input.externalStatus, input.externalUpdatedAt,
+      moveColumn ? 1 : 0, input.columnKey,
+      moveColumn ? 1 : 0, moveColumn ? kanbanDb.nextPosition(input.projectId, input.columnKey) : 0,
+      existing.id,
+    );
+    return { card: kanbanDb.getCard(existing.id) as KanbanCardRow, outcome: 'updated' };
+  },
+
+  getConnector(projectId: string): KanbanConnectorRow | null {
+    const row = getConnection()
+      .prepare(`SELECT ${CONNECTOR_COLUMNS} FROM kanban_connectors WHERE project_id = ?`)
+      .get(projectId) as KanbanConnectorRow | undefined;
+    return row ?? null;
+  },
+
+  listEnabledConnectors(): KanbanConnectorRow[] {
+    return getConnection()
+      .prepare(`SELECT ${CONNECTOR_COLUMNS} FROM kanban_connectors WHERE enabled = 1`)
+      .all() as KanbanConnectorRow[];
+  },
+
+  /** Saves a connector. A `secret` of undefined keeps the stored one (the client never sees it). */
+  saveConnector(input: { projectId: string; type: string; config: unknown; secret?: string; enabled: boolean }): KanbanConnectorRow {
+    const db = getConnection();
+    db.prepare(
+      `INSERT INTO kanban_connectors (project_id, type, config, secret, enabled)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(project_id) DO UPDATE SET
+         type = excluded.type,
+         config = excluded.config,
+         secret = COALESCE(?, kanban_connectors.secret),
+         enabled = excluded.enabled,
+         updated_at = CURRENT_TIMESTAMP`,
+    ).run(
+      input.projectId,
+      input.type,
+      JSON.stringify(input.config ?? {}),
+      input.secret ?? null,
+      input.enabled ? 1 : 0,
+      input.secret ?? null,
+    );
+    return kanbanDb.getConnector(input.projectId) as KanbanConnectorRow;
+  },
+
+  deleteConnector(projectId: string): boolean {
+    return getConnection().prepare('DELETE FROM kanban_connectors WHERE project_id = ?').run(projectId).changes > 0;
+  },
+
+  recordConnectorSync(projectId: string, result: { error: string | null; count: number | null }): void {
+    getConnection()
+      .prepare(
+        `UPDATE kanban_connectors
+         SET last_sync_at = CURRENT_TIMESTAMP, last_sync_error = ?, last_sync_count = COALESCE(?, last_sync_count)
+         WHERE project_id = ?`,
+      )
+      .run(result.error, result.count, projectId);
   },
 };

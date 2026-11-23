@@ -291,6 +291,19 @@ export const api = {
     stop: (cardId: string) => post(`/api/kanban/cards/${encodeURIComponent(cardId)}/stop`),
     cardForSession: (sessionId: string) =>
       get(`/api/kanban/sessions/${encodeURIComponent(sessionId)}/card`),
+    // What the agent is doing on a card right now (live steps of its run).
+    activity: (cardId: string) => get(`/api/kanban/cards/${encodeURIComponent(cardId)}/activity`),
+    // External tracker (Jira…) linked to a project board. The token is write-only.
+    connector: (projectId: string) =>
+      get(`/api/kanban/projects/${encodeURIComponent(projectId)}/connector`),
+    saveConnector: (projectId: string, body: { type: string; config: unknown; secret?: string; enabled: boolean }) =>
+      put(`/api/kanban/projects/${encodeURIComponent(projectId)}/connector`, body),
+    deleteConnector: (projectId: string) =>
+      del(`/api/kanban/projects/${encodeURIComponent(projectId)}/connector`),
+    testConnector: (projectId: string, body: { type: string; config: unknown; secret?: string }) =>
+      post(`/api/kanban/projects/${encodeURIComponent(projectId)}/connector/test`, body),
+    syncConnector: (projectId: string) =>
+      post(`/api/kanban/projects/${encodeURIComponent(projectId)}/connector/sync`),
   },
 
   // Workspace file tree

@@ -139,6 +139,69 @@ router.post(
   }),
 );
 
+/** Reads a connector payload: type, config object, optional new secret, enabled flag. */
+function readConnectorInput(body: Record<string, unknown>) {
+  const type = typeof body.type === 'string' && body.type.trim() ? body.type.trim() : null;
+  if (!type) {
+    throw invalid('type is required.');
+  }
+  const config = body.config && typeof body.config === 'object' && !Array.isArray(body.config)
+    ? body.config as Record<string, unknown>
+    : {};
+  // An empty secret means "keep the stored one": the client never receives it to send it back.
+  const secret = typeof body.secret === 'string' && body.secret.trim() ? body.secret.trim() : undefined;
+  return { type, config, secret, enabled: body.enabled !== false };
+}
+
+/** The tracker linked to a project (null when none); never includes the token. */
+router.get(
+  '/projects/:projectId/connector',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(createApiSuccessResponse(kanbanService.getConnector(readParam(req, 'projectId'))));
+  }),
+);
+
+router.put(
+  '/projects/:projectId/connector',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(createApiSuccessResponse(
+      kanbanService.saveConnector(readParam(req, 'projectId'), readConnectorInput(readBody(req))),
+    ));
+  }),
+);
+
+router.delete(
+  '/projects/:projectId/connector',
+  asyncHandler(async (req: Request, res: Response) => {
+    kanbanService.deleteConnector(readParam(req, 'projectId'));
+    res.json(createApiSuccessResponse({ deleted: true }));
+  }),
+);
+
+/** Checks settings before saving them, and lists the tracker's statuses with their default column. */
+router.post(
+  '/projects/:projectId/connector/test',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { type, config, secret } = readConnectorInput(readBody(req));
+    res.json(createApiSuccessResponse(await kanbanService.testConnector(readParam(req, 'projectId'), { type, config, secret })));
+  }),
+);
+
+router.post(
+  '/projects/:projectId/connector/sync',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(createApiSuccessResponse(await kanbanService.syncConnector(readParam(req, 'projectId'))));
+  }),
+);
+
+/** What the agent is doing on the card right now. */
+router.get(
+  '/cards/:cardId/activity',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(createApiSuccessResponse(kanbanService.getActivity(readParam(req, 'cardId'))));
+  }),
+);
+
 /** The card a conversation belongs to (null when it belongs to none). */
 router.get(
   '/sessions/:sessionId/card',

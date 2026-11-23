@@ -34,4 +34,6 @@ export type {
   KanbanColumnKey,
   KanbanCommentAuthor,
   KanbanCommentRow,
+  KanbanConnectorRow,
+  KanbanExternalCardInput,
 } from './repositories/kanban.db.js';

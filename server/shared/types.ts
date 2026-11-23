@@ -1558,3 +1558,77 @@ export type CliApplication = {
 export type SandboxCommandService = {
   execute(argumentsList: string[]): Promise<number>;
 };
+
+// ---------------------------
+
+//----------------- KANBAN EXTERNAL TRACKER CONNECTORS ------------
+
+/**
+ * A board column key as connectors map to and from tracker statuses. Mirrors
+ * the database's `KanbanColumnKey`; kept here because connectors live outside
+ * the database module and must not depend on it.
+ */
+export type KanbanBoardColumn = 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
+
+/**
+ * A tracker status reduced to what the board needs: its display name and its
+ * coarse category (`new` = not started, `indeterminate` = in progress,
+ * `done` = finished), which is what the default column mapping keys on.
+ */
+export type KanbanExternalStatus = {
+  name: string;
+  category: 'new' | 'indeterminate' | 'done' | string;
+};
+
+/**
+ * One ticket read from an external tracker, normalized across connectors.
+ * `id` is the tracker's stable identifier, `key` the human-facing one
+ * (`PROJ-123`). `description` is plain text/markdown, already converted from
+ * whatever rich format the tracker uses. `updatedAt` is the tracker's own
+ * last-modified stamp, used to skip unchanged tickets on the next pull.
+ */
+export type KanbanExternalTicket = {
+  id: string;
+  key: string;
+  url: string | null;
+  title: string;
+  description: string;
+  status: KanbanExternalStatus;
+  updatedAt: string | null;
+  meta: {
+    priority?: string | null;
+    type?: string | null;
+    labels?: string[];
+    assignee?: string | null;
+  };
+};
+
+/**
+ * Settings and credentials handed to a connector for one call. `config` is the
+ * connector-specific JSON stored for the project; `secret` is its API token.
+ */
+export type KanbanConnectorContext = {
+  config: Record<string, unknown>;
+  secret: string;
+};
+
+/**
+ * The contract every tracker connector implements (Jira today; Linear or
+ * GitHub Issues later). The sync service only talks to trackers through it,
+ * so adding a tracker never touches the board.
+ *
+ * - `testConnection` checks the credentials and returns the statuses the
+ *   project uses, for the status-to-column mapping screen.
+ * - `fetchTickets` returns the tickets the configured query selects.
+ * - `moveTicket` moves a ticket to the tracker status that best matches a
+ *   board column; it returns the resulting status name, or null when no
+ *   transition fits (the move is then simply not mirrored).
+ * - `addComment` posts a plain-text comment on a ticket.
+ */
+export type KanbanTrackerConnector = {
+  type: string;
+  testConnection(context: KanbanConnectorContext): Promise<{ account: string; statuses: KanbanExternalStatus[] }>;
+  fetchTickets(context: KanbanConnectorContext): Promise<KanbanExternalTicket[]>;
+  moveTicket(context: KanbanConnectorContext, ticketKey: string, column: KanbanBoardColumn): Promise<string | null>;
+  addComment(context: KanbanConnectorContext, ticketKey: string, body: string): Promise<void>;
+};

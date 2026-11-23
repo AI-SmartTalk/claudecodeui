@@ -301,7 +301,8 @@
       "agent": "Agent",
       "system": "Système",
       "you": "Toi",
-      "pending": "en attente de l'agent"
+      "pending": "en attente de l'agent",
+      "youShort": "Moi"
     },
     "errors": {
       "titleRequired": "Le titre est obligatoire."
@@ -327,6 +328,71 @@
     "continue": "Continuer",
     "launch": "Lancer l'agent",
     "lastRunFailed": "Dernier lancement en échec :",
-    "confirmDelete": "Supprimer cette carte et ses commentaires ? Ses conversations sont conservées."
+    "confirmDelete": "Supprimer cette carte et ses commentaires ? Ses conversations sont conservées.",
+    "activity": {
+      "working": "L'agent travaille",
+      "follow": "Suivre en direct",
+      "starting": "Démarrage… ses premières étapes s'afficheront ici."
+    },
+    "moveTo": "Déplacer vers",
+    "toTestSummary": "À tester",
+    "add": "Ajouter",
+    "summary": {
+      "running_one": "{{count}} en cours",
+      "running_other": "{{count}} en cours",
+      "queued_one": "{{count}} en file",
+      "queued_other": "{{count}} en file",
+      "review_one": "{{count}} à tester",
+      "review_other": "{{count}} à tester",
+      "idle_one": "{{count}} carte",
+      "idle_other": "{{count}} cartes"
+    },
+    "empty": {
+      "backlog": "Idées et tickets pas encore planifiés.",
+      "todo": "Ce que l'agent doit prendre ensuite.",
+      "in_progress": "Les cartes sur lesquelles l'agent travaille.",
+      "review": "Terminé par l'agent, à toi de tester.",
+      "done": "Testé et validé."
+    },
+    "connector": {
+      "title": "Source externe",
+      "subtitle": "Importe des tickets en cartes et garde leur statut synchronisé.",
+      "soon": "Bientôt",
+      "lastSync": "Synchronisé {{when}} · {{count}} tickets",
+      "neverSynced": "Pas encore synchronisé",
+      "account": "Compte",
+      "siteUrl": "Adresse du site",
+      "token": "Token API",
+      "createToken": "En créer un",
+      "tokenSaved": "•••••• enregistré, laisser vide pour le garder",
+      "tickets": "Tickets à importer",
+      "projectKey": "Clé du projet Jira",
+      "importDone": "Importer aussi les tickets terminés",
+      "hideJql": "Masquer le JQL personnalisé",
+      "showJql": "Utiliser une requête JQL personnalisée",
+      "jqlHelp": "Remplace la clé de projet si elle est remplie.",
+      "mapping": "Statut → colonne",
+      "test": "Tester la connexion",
+      "connectedAs": "Connecté en tant que {{account}}",
+      "mappingHelp": "Teste la connexion pour lister tes statuts Jira et choisir leur colonne. Par défaut : À faire → Backlog, En cours → En cours, Terminé → Fait.",
+      "backToJira": "Retour vers Jira",
+      "pushStatus": "Déplacer le ticket quand sa carte bouge",
+      "pushStatusHelp": "Ex. : l'agent termine, le ticket passe dans un statut « revue/test ».",
+      "postComments": "Publier le résumé de l'agent en commentaire du ticket",
+      "enabled": "Synchroniser automatiquement toutes les 5 minutes",
+      "confirmUnlink": "Délier cette source ? Les cartes importées restent sur le tableau.",
+      "unlink": "Délier",
+      "saveAndSync": "Enregistrer et synchroniser",
+      "link": "Lier une source",
+      "syncNow": "Synchroniser",
+      "syncResult": "{{total}} tickets · {{created}} nouveaux · {{updated}} mis à jour"
+    },
+    "preview": "Aperçu",
+    "edit": "Modifier",
+    "attachments": "Pièces jointes",
+    "noComments": "Le résumé de l'agent et tes retours s'afficheront ici.",
+    "whatToTest": "Ce que l'agent a fait, à tester",
+    "markDone": "Valider → Fait",
+    "unsaved": "Modifications non enregistrées"
   }
 }

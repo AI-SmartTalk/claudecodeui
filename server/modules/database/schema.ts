@@ -279,6 +279,42 @@ CREATE TABLE IF NOT EXISTS kanban_cards (
     attachments TEXT NOT NULL DEFAULT '[]',
     agent_status TEXT NOT NULL DEFAULT 'idle',
     agent_error TEXT DEFAULT NULL,
+    -- Set when the card mirrors a ticket of an external tracker (see
+    -- kanban_connectors). \`source\` is the connector type (\`jira\`),
+    -- \`external_id\` its stable id, \`external_key\` the human key (PROJ-123).
+    -- \`external_status\` is the tracker status last seen or pushed, so a pull
+    -- only moves the card when the ticket actually changed status there.
+    source TEXT DEFAULT NULL,
+    external_id TEXT DEFAULT NULL,
+    external_key TEXT DEFAULT NULL,
+    external_url TEXT DEFAULT NULL,
+    external_status TEXT DEFAULT NULL,
+    external_updated_at TEXT DEFAULT NULL,
+    -- Display-only extras from the tracker (priority, type, labels, assignee) as JSON.
+    external_meta TEXT DEFAULT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE
+);
+`;
+
+/**
+ * The external tracker a project board is linked to (one per project).
+ *
+ * \`config\` is the connector's JSON settings (base URL, account, query, status
+ * mapping, push options). \`secret\` holds its API token: it is only ever read by
+ * the connector on the server and never returned to a client.
+ */
+export const KANBAN_CONNECTORS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS kanban_connectors (
+    project_id TEXT PRIMARY KEY NOT NULL,
+    type TEXT NOT NULL,
+    config TEXT NOT NULL DEFAULT '{}',
+    secret TEXT DEFAULT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    last_sync_at DATETIME DEFAULT NULL,
+    last_sync_error TEXT DEFAULT NULL,
+    last_sync_count INTEGER DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE

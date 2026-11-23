@@ -263,3 +263,27 @@ export const cacheDefaultModels = (models: DefaultModelMap): void => {
   }
 };
 
+
+// ---------------------------
+
+//----------------- RELATIVE TIME ------------
+
+/**
+ * Formats a past instant as a short relative time in the given locale
+ * ("il y a 5 min", "2 h ago"), falling back to a date beyond a week.
+ * Used by the kanban board and card views; returns '' for an unparsable input.
+ */
+export function formatRelativeTime(value: string | Date | null | undefined, locale?: string): string {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  const time = date.getTime();
+  if (Number.isNaN(time)) return '';
+  const seconds = Math.round((time - Date.now()) / 1000);
+  const formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'short' });
+  const abs = Math.abs(seconds);
+  if (abs < 60) return formatter.format(seconds, 'second');
+  if (abs < 3600) return formatter.format(Math.round(seconds / 60), 'minute');
+  if (abs < 86400) return formatter.format(Math.round(seconds / 3600), 'hour');
+  if (abs < 7 * 86400) return formatter.format(Math.round(seconds / 86400), 'day');
+  return date.toLocaleDateString(locale);
+}

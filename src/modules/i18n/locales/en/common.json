@@ -425,7 +425,8 @@
       "agent": "Agent",
       "system": "System",
       "you": "You",
-      "pending": "waiting for the agent"
+      "pending": "waiting for the agent",
+      "youShort": "Me"
     },
     "errors": {
       "titleRequired": "A title is required."
@@ -451,6 +452,71 @@
     "continue": "Continue",
     "launch": "Launch agent",
     "lastRunFailed": "Last run failed:",
-    "confirmDelete": "Delete this card and its comments? Its conversations are kept."
+    "confirmDelete": "Delete this card and its comments? Its conversations are kept.",
+    "activity": {
+      "working": "The agent is working",
+      "follow": "Follow live",
+      "starting": "Starting… the first steps will show up here."
+    },
+    "moveTo": "Move to",
+    "toTestSummary": "To test",
+    "add": "Add",
+    "summary": {
+      "running_one": "{{count}} in progress",
+      "running_other": "{{count}} in progress",
+      "queued_one": "{{count}} queued",
+      "queued_other": "{{count}} queued",
+      "review_one": "{{count}} to test",
+      "review_other": "{{count}} to test",
+      "idle_one": "{{count}} card",
+      "idle_other": "{{count}} cards"
+    },
+    "empty": {
+      "backlog": "Ideas and tickets not planned yet.",
+      "todo": "What the agent should pick up next.",
+      "in_progress": "Cards the agent is working on.",
+      "review": "Finished by the agent — your turn to test.",
+      "done": "Tested and validated."
+    },
+    "connector": {
+      "title": "External source",
+      "subtitle": "Import tickets as cards and keep their status in sync.",
+      "soon": "Coming soon",
+      "lastSync": "Last sync {{when}} · {{count}} tickets",
+      "neverSynced": "Not synced yet",
+      "account": "Account",
+      "siteUrl": "Site URL",
+      "token": "API token",
+      "createToken": "Create one",
+      "tokenSaved": "•••••• saved — leave empty to keep",
+      "tickets": "Tickets to import",
+      "projectKey": "Jira project key",
+      "importDone": "Also import finished tickets",
+      "hideJql": "Hide custom JQL",
+      "showJql": "Use a custom JQL query",
+      "jqlHelp": "Overrides the project key when set.",
+      "mapping": "Status → column",
+      "test": "Test connection",
+      "connectedAs": "Connected as {{account}}",
+      "mappingHelp": "Test the connection to list your Jira statuses and choose their column. By default: To do → Backlog, In progress → In progress, Done → Done.",
+      "backToJira": "Back to Jira",
+      "pushStatus": "Move the ticket when its card moves",
+      "pushStatusHelp": "E.g. the agent finishes → the ticket goes to a \"review/test\" status.",
+      "postComments": "Post the agent's summary as a ticket comment",
+      "enabled": "Sync automatically every 5 minutes",
+      "confirmUnlink": "Unlink this source? Imported cards stay on the board.",
+      "unlink": "Unlink",
+      "saveAndSync": "Save and sync",
+      "link": "Link a source",
+      "syncNow": "Sync now",
+      "syncResult": "{{total}} tickets · {{created}} new · {{updated}} updated"
+    },
+    "preview": "Preview",
+    "edit": "Edit",
+    "attachments": "Attachments",
+    "noComments": "The agent's summary and your feedback will show up here.",
+    "whatToTest": "What the agent did — to test",
+    "markDone": "Validate → Done",
+    "unsaved": "Unsaved changes"
   }
 }

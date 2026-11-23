@@ -6,8 +6,10 @@ import type {
   KanbanColumnKey,
   KanbanCommentAuthor,
   KanbanCommentRow,
+  KanbanConnectorRow,
 } from '@/modules/database/index.js';
 import type { KanbanAgentRunner } from '@/modules/kanban/services/kanban-agent.service.js';
+import type { KanbanSyncService } from '@/modules/kanban/services/kanban-sync.service.js';
 import { AppError } from '@/shared/utils.js';
 
 /** Board columns in display order; the only values `column` may take. */
@@ -34,6 +36,37 @@ type KanbanCommentDto = {
   createdAt: string;
 };
 
+/** The tracker ticket a card mirrors. */
+type KanbanExternalDto = {
+  source: string;
+  key: string | null;
+  url: string | null;
+  status: string | null;
+  priority: string | null;
+  type: string | null;
+  labels: string[];
+  assignee: string | null;
+};
+
+/** What the agent is doing right now, for the card's live strip. */
+type KanbanActivityDto = {
+  running: boolean;
+  sessionId: string | null;
+  /** Most recent first, at most a handful. */
+  steps: Array<{ kind: 'tool' | 'text' | 'status'; label: string; detail: string | null; at: string | null }>;
+};
+
+/** A project's connector as clients see it: never the secret, only whether one is stored. */
+type KanbanConnectorDto = {
+  type: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  hasSecret: boolean;
+  lastSyncAt: string | null;
+  lastSyncError: string | null;
+  lastSyncCount: number | null;
+};
+
 type KanbanCardDto = {
   id: string;
   projectId: string;
@@ -51,6 +84,10 @@ type KanbanCardDto = {
   /** The conversation a comment continues: the newest linked one that still exists. */
   activeSessionId: string | null;
   commentCount: number;
+  /** null for a card created on the board. */
+  external: KanbanExternalDto | null;
+  /** The agent's latest reply, so "to test" cards can show it without loading the thread. */
+  latestAgentReply: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -94,7 +131,55 @@ function toCommentDto(row: KanbanCommentRow): KanbanCommentDto {
   };
 }
 
-function toCardDto(row: KanbanCardRow, sessions: KanbanCardSessionRow[], commentCount: number): KanbanCardDto {
+function readObject(raw: string | null): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function toExternalDto(row: KanbanCardRow): KanbanExternalDto | null {
+  if (!row.source) {
+    return null;
+  }
+  const meta = readObject(row.external_meta);
+  const text = (value: unknown) => (typeof value === 'string' && value ? value : null);
+  return {
+    source: row.source,
+    key: row.external_key,
+    url: row.external_url,
+    status: row.external_status,
+    priority: text(meta.priority),
+    type: text(meta.type),
+    labels: Array.isArray(meta.labels) ? meta.labels.filter((label): label is string => typeof label === 'string') : [],
+    assignee: text(meta.assignee),
+  };
+}
+
+function toConnectorDto(row: KanbanConnectorRow): KanbanConnectorDto {
+  return {
+    type: row.type,
+    enabled: Boolean(row.enabled),
+    config: readObject(row.config),
+    hasSecret: Boolean(row.secret),
+    lastSyncAt: row.last_sync_at ? toIsoTimestamp(row.last_sync_at) : null,
+    lastSyncError: row.last_sync_error,
+    lastSyncCount: row.last_sync_count,
+  };
+}
+
+/** Longest agent reply excerpt carried on board cards. */
+const REPLY_EXCERPT_LENGTH = 600;
+
+function toCardDto(
+  row: KanbanCardRow,
+  sessions: KanbanCardSessionRow[],
+  commentCount: number,
+  latestAgentReply: string | null = null,
+): KanbanCardDto {
   const sessionDtos = sessions.map(toSessionDto);
   const active = [...sessionDtos].reverse().find((session) => session.exists) ?? null;
   return {
@@ -112,6 +197,10 @@ function toCardDto(row: KanbanCardRow, sessions: KanbanCardSessionRow[], comment
     sessions: sessionDtos,
     activeSessionId: active?.sessionId ?? null,
     commentCount,
+    external: toExternalDto(row),
+    latestAgentReply: latestAgentReply && latestAgentReply.length > REPLY_EXCERPT_LENGTH
+      ? `${latestAgentReply.slice(0, REPLY_EXCERPT_LENGTH)}…`
+      : latestAgentReply,
     createdAt: toIsoTimestamp(row.created_at),
     updatedAt: toIsoTimestamp(row.updated_at),
   };
@@ -131,9 +220,13 @@ function requireCard(cardId: string): KanbanCardRow {
   return card;
 }
 
+function latestAgentReplyOf(comments: KanbanCommentRow[]): string | null {
+  return [...comments].reverse().find((comment) => comment.author === 'agent')?.body ?? null;
+}
+
 function buildCardDto(card: KanbanCardRow): KanbanCardDto {
   const comments = kanbanDb.listComments(card.id);
-  return toCardDto(card, kanbanDb.listCardSessions(card.id), comments.length);
+  return toCardDto(card, kanbanDb.listCardSessions(card.id), comments.length, latestAgentReplyOf(comments));
 }
 
 /** Validated input for creating a card (parsed by the routes). */
@@ -150,6 +243,16 @@ export type KanbanCardCreateInput = {
 export type KanbanCardUpdateInput = Partial<KanbanCardCreateInput & { position: number }>;
 
 let agentRunner: KanbanAgentRunner | null = null;
+let syncService: KanbanSyncService | null = null;
+let activityReader: ((sessionId: string) => KanbanActivityDto['steps']) | null = null;
+let busyReader: ((sessionId: string) => boolean) | null = null;
+
+function requireSync(): KanbanSyncService {
+  if (!syncService) {
+    throw new AppError('La synchronisation n\'est pas encore prête.', { code: 'KANBAN_SYNC_UNAVAILABLE', statusCode: 503 });
+  }
+  return syncService;
+}
 
 function requireRunner(): KanbanAgentRunner {
   if (!agentRunner) {
@@ -177,15 +280,18 @@ export const kanbanService = {
       card,
       sessionsByCard.get(card.id) ?? [],
       commentCounts.get(card.id) ?? 0,
+      // Only the "to test" column shows the reply on the board; skip the read elsewhere.
+      card.column_key === 'review' ? latestAgentReplyOf(kanbanDb.listComments(card.id)) : null,
     ));
     return { columns: KANBAN_COLUMNS, cards };
   },
 
   getCard(cardId: string): KanbanCardDto & { comments: KanbanCommentDto[] } {
     const card = requireCard(cardId);
-    const comments = kanbanDb.listComments(cardId).map(toCommentDto);
+    const rows = kanbanDb.listComments(cardId);
+    const comments = rows.map(toCommentDto);
     return {
-      ...toCardDto(card, kanbanDb.listCardSessions(cardId), comments.length),
+      ...toCardDto(card, kanbanDb.listCardSessions(cardId), comments.length, latestAgentReplyOf(rows)),
       comments,
     };
   },
@@ -225,6 +331,9 @@ export const kanbanService = {
       model: input.model,
       attachments: input.attachments,
     }) as KanbanCardRow;
+    if (movesColumn && syncService) {
+      void syncService.onCardMoved(cardId, input.column as KanbanColumnKey);
+    }
     return buildCardDto(updated);
   },
 
@@ -277,6 +386,50 @@ export const kanbanService = {
     return { queued };
   },
 
+  /** What the agent is doing on a card right now, read from its live run. */
+  getActivity(cardId: string): KanbanActivityDto {
+    requireCard(cardId);
+    const latest = [...kanbanDb.listCardSessions(cardId)].reverse().find((session) => session.session_exists);
+    if (!latest) {
+      return { running: false, sessionId: null, steps: [] };
+    }
+    return {
+      running: busyReader?.(latest.session_id) ?? false,
+      sessionId: latest.session_id,
+      steps: activityReader?.(latest.session_id) ?? [],
+    };
+  },
+
+  getConnector(projectId: string): KanbanConnectorDto | null {
+    requireProject(projectId);
+    const row = kanbanDb.getConnector(projectId);
+    return row ? toConnectorDto(row) : null;
+  },
+
+  saveConnector(projectId: string, input: { type: string; config: Record<string, unknown>; secret?: string; enabled: boolean }): KanbanConnectorDto {
+    requireProject(projectId);
+    if (!input.secret && !kanbanDb.getConnector(projectId)?.secret) {
+      throw new AppError('Le token API est requis.', { code: 'KANBAN_CONNECTOR_INVALID', statusCode: 400 });
+    }
+    return toConnectorDto(kanbanDb.saveConnector({ projectId, ...input }));
+  },
+
+  /** Unlinks the tracker. Imported cards stay on the board as plain cards. */
+  deleteConnector(projectId: string): void {
+    requireProject(projectId);
+    kanbanDb.deleteConnector(projectId);
+  },
+
+  async testConnector(projectId: string, input: { type: string; config: Record<string, unknown>; secret?: string }) {
+    requireProject(projectId);
+    return requireSync().testConnection(projectId, input);
+  },
+
+  async syncConnector(projectId: string) {
+    requireProject(projectId);
+    return requireSync().syncProject(projectId);
+  },
+
   /** The card a conversation was opened from, so the chat can link back to it. */
   findCardBySession(sessionId: string): KanbanCardDto | null {
     const card = kanbanDb.findCardBySession(sessionId);
@@ -287,4 +440,18 @@ export const kanbanService = {
 /** Installs the agent runner; called once by the Kanban module's initializer at boot. */
 export function setKanbanAgentRunner(runner: KanbanAgentRunner | null): void {
   agentRunner = runner;
+}
+
+/**
+ * Installs the tracker sync and the live-run readers; called once by the
+ * Kanban module's initializer at boot (tests install fakes).
+ */
+export function setKanbanRuntime(runtime: {
+  sync: KanbanSyncService | null;
+  readActivity?: ((sessionId: string) => KanbanActivityDto['steps']) | null;
+  isSessionBusy?: ((sessionId: string) => boolean) | null;
+}): void {
+  syncService = runtime.sync;
+  activityReader = runtime.readActivity ?? null;
+  busyReader = runtime.isSessionBusy ?? null;
 }

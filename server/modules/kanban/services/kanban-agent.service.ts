@@ -1,5 +1,5 @@
 import { kanbanDb } from '@/modules/database/index.js';
-import type { KanbanCardRow, KanbanCommentRow } from '@/modules/database/index.js';
+import type { KanbanCardRow, KanbanColumnKey, KanbanCommentRow } from '@/modules/database/index.js';
 import { AppError } from '@/shared/utils.js';
 
 /**
@@ -25,6 +25,10 @@ export type KanbanAgentDependencies = {
   /** The agent's final words in the session, used as its comment on the card. */
   readLastAssistantMessage(sessionId: string): Promise<string | null>;
   getProjectPath(projectId: string): string | null;
+  /** Mirrors a column change made by the runner to the card's external ticket, if any. */
+  onCardMoved?(cardId: string, column: KanbanColumnKey): void;
+  /** Mirrors the agent's final reply to the card's external ticket, if any. */
+  onAgentReply?(cardId: string, body: string): void;
 };
 
 /** What a run was asked to do. */
@@ -104,6 +108,13 @@ function buildFollowUpPrompt(card: KanbanCardRow, comments: KanbanCommentRow[]):
  * running, so a stop or a newer run is never overwritten by a late settle.
  */
 export function createKanbanAgentRunner(dependencies: KanbanAgentDependencies) {
+  /** Notifies the sync hook when a transition actually moved the card. */
+  function notifyMove(cardId: string, before: KanbanColumnKey, after: KanbanColumnKey | undefined): void {
+    if (after && after !== before) {
+      dependencies.onCardMoved?.(cardId, after);
+    }
+  }
+
   /** Projects whose queue is being advanced right now, so two settles cannot both start the next card. */
   const pumping = new Set<string>();
 
@@ -142,27 +153,31 @@ export function createKanbanAgentRunner(dependencies: KanbanAgentDependencies) {
         kanbanDb.releaseComments(claimed.map((comment) => comment.id));
       }
       const reason = result.error ?? 'L\'agent n\'a pas pu démarrer.';
+      const failedColumn = card.column_key === 'in_progress' ? 'todo' as const : undefined;
       const transitioned = kanbanDb.transitionAgentStatus(cardId, 'running', {
         agentStatus: 'failed',
         agentError: reason,
-        columnKey: card.column_key === 'in_progress' ? 'todo' : undefined,
+        columnKey: failedColumn,
       });
       if (transitioned) {
+        notifyMove(cardId, card.column_key, failedColumn);
         kanbanDb.addComment({ cardId, author: 'system', body: `Échec de l'agent : ${reason}`, sessionId, delivered: true });
       }
       await pump(card.project_id);
       return;
     }
 
+    const doneColumn = card.column_key === 'in_progress' ? 'review' as const : undefined;
     const transitioned = kanbanDb.transitionAgentStatus(cardId, 'running', {
       agentStatus: 'idle',
       agentError: null,
-      columnKey: card.column_key === 'in_progress' ? 'review' : undefined,
+      columnKey: doneColumn,
     });
     if (!transitioned) {
       // Stopped by the user, or superseded: whoever changed the state owns the card now.
       return;
     }
+    notifyMove(cardId, card.column_key, doneColumn);
 
     let reply: string | null = null;
     try {
@@ -175,6 +190,7 @@ export function createKanbanAgentRunner(dependencies: KanbanAgentDependencies) {
         ? `${reply.slice(0, MAX_AGENT_COMMENT_LENGTH)}\n\n… (suite dans la conversation)`
         : reply;
       kanbanDb.addComment({ cardId, author: 'agent', body, sessionId, delivered: true });
+      dependencies.onAgentReply?.(cardId, reply);
     }
 
     // A comment written while the agent worked is answered right away, in the same conversation.
@@ -231,11 +247,13 @@ export function createKanbanAgentRunner(dependencies: KanbanAgentDependencies) {
       }
     }
 
+    const runningColumn = card.column_key === 'done' ? undefined : 'in_progress' as const;
     const updated = kanbanDb.updateCard(cardId, {
       agentStatus: 'running',
       agentError: null,
-      columnKey: card.column_key === 'done' ? undefined : 'in_progress',
+      columnKey: runningColumn,
     }) as KanbanCardRow;
+    notifyMove(cardId, card.column_key, runningColumn);
 
     const turn = dependencies.runTurn({
       sessionId,
@@ -278,10 +296,10 @@ export function createKanbanAgentRunner(dependencies: KanbanAgentDependencies) {
       return card;
     }
     // Card first: the run's settle then sees it is no longer running and leaves it alone.
-    kanbanDb.transitionAgentStatus(cardId, 'running', {
-      agentStatus: 'idle',
-      columnKey: card.column_key === 'in_progress' ? 'todo' : undefined,
-    });
+    const stoppedColumn = card.column_key === 'in_progress' ? 'todo' as const : undefined;
+    if (kanbanDb.transitionAgentStatus(cardId, 'running', { agentStatus: 'idle', columnKey: stoppedColumn })) {
+      notifyMove(cardId, card.column_key, stoppedColumn);
+    }
     kanbanDb.addComment({ cardId, author: 'system', body: 'Agent arrêté.', delivered: true });
     const latest = kanbanDb.listCardSessions(cardId).at(-1);
     if (latest) {
